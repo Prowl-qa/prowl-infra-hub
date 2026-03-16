@@ -1,0 +1,24 @@
+# Prowl Infra Hub
+> A curated registry of validated infrastructure automation templates.
+
+## API
+- GET /api/playbooks — Full catalog (JSON)
+- GET /api/playbooks/search?q=&category=&tags=&tool=&cloud_provider=&risk_level= — Search
+- GET /api/playbooks/{id} — Single playbook with content
+- GET /api/playbooks/file?path= — Download raw YAML
+- GET /api/openapi.json — OpenAPI 3.0 specification
+
+## Categories
+patching, provisioning, security, monitoring, containers, networking, backup, configuration, ci-cd
+
+## Supported Tools
+ansible (more coming soon: terraform, docker-compose, k8s)
+
+## Schema
+Each playbook template includes: name, description, tags, tool, cloud_provider, os_family, risk_level, compliance_tags, vars, and playbook content.
+
+## Usage
+1. Search for playbooks matching your infrastructure need
+2. Download the YAML template
+3. Customize variables for your environment
+4. Run with your existing automation tools (e.g. ansible-playbook)

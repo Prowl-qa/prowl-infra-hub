@@ -1,0 +1,60 @@
+# Firewall Setup
+# Configures UFW (Uncomplicated Firewall) with a deny-by-default policy,
+# then opens only the ports your application requires.
+#
+# Customize:
+#   - Set INVENTORY_GROUP to target hosts
+#   - Adjust ALLOWED_PORTS to your application's needs (comma-separated)
+#   - Set SSH_PORT if using a non-standard SSH port
+
+name: firewall-setup
+description: UFW baseline firewall with deny-by-default and selective port openings
+tags: [security, firewall, ufw, linux, hardening]
+tool: ansible
+cloud_provider: agnostic
+os_family: debian
+risk_level: high
+compliance_tags: [SOC2, PCI-DSS, CIS]
+
+vars:
+  INVENTORY_GROUP: "{{INVENTORY_GROUP}}"
+  SSH_PORT: "{{SSH_PORT}}"
+  ALLOWED_PORTS: "{{ALLOWED_PORTS}}"
+
+playbook: |
+  ---
+  - hosts: "{{ inventory_group }}"
+    become: true
+    tasks:
+      - name: Install UFW
+        apt:
+          name: ufw
+          state: present
+          update_cache: yes
+
+      - name: Set default deny incoming
+        ufw:
+          direction: incoming
+          policy: deny
+
+      - name: Set default allow outgoing
+        ufw:
+          direction: outgoing
+          policy: allow
+
+      - name: Allow SSH
+        ufw:
+          rule: allow
+          port: "{{ ssh_port | default('22') }}"
+          proto: tcp
+
+      - name: Allow application ports
+        ufw:
+          rule: allow
+          port: "{{ item }}"
+          proto: tcp
+        loop: "{{ (allowed_ports | default('80,443')).split(',') }}"
+
+      - name: Enable UFW
+        ufw:
+          state: enabled
