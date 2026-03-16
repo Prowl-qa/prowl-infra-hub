@@ -1,0 +1,54 @@
+# Rolling OS Update
+# Performs rolling package updates across a server group with health checks
+# between batches to prevent fleet-wide outages.
+#
+# Customize:
+#   - Set INVENTORY_GROUP to your Ansible inventory group
+#   - Adjust BATCH_SIZE for your fleet size
+#   - Modify health check command for your application
+
+name: rolling-os-update
+description: Rolling OS package updates with health checks between batches
+tags: [patching, linux, apt, rolling-update]
+tool: ansible
+cloud_provider: agnostic
+os_family: debian
+risk_level: medium
+compliance_tags: []
+
+vars:
+  INVENTORY_GROUP: "{{INVENTORY_GROUP}}"
+  BATCH_SIZE: "{{BATCH_SIZE}}"
+  HEALTH_CHECK_CMD: "{{HEALTH_CHECK_CMD}}"
+
+playbook: |
+  ---
+  - hosts: "{{ inventory_group }}"
+    serial: "{{ batch_size | default(3) }}"
+    become: true
+    tasks:
+      - name: Update package cache
+        apt:
+          update_cache: yes
+          cache_valid_time: 3600
+
+      - name: Upgrade packages
+        apt:
+          upgrade: safe
+        register: upgrade_result
+
+      - name: Check if reboot required
+        stat:
+          path: /var/run/reboot-required
+        register: reboot_required
+
+      - name: Reboot if required
+        reboot:
+          reboot_timeout: 300
+        when: reboot_required.stat.exists
+
+    post_tasks:
+      - name: Health check
+        command: "{{ health_check_cmd | default('systemctl is-system-running') }}"
+        register: health
+        failed_when: health.rc != 0

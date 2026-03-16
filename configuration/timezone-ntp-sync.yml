@@ -1,0 +1,72 @@
+# Timezone and NTP Sync
+# Sets the system timezone and configures NTP synchronization using
+# systemd-timesyncd for consistent time across your fleet.
+#
+# Customize:
+#   - Set INVENTORY_GROUP to target hosts
+#   - Set TIMEZONE to your desired timezone (e.g., America/New_York)
+#   - Set NTP_SERVERS if using custom NTP servers (optional)
+
+name: timezone-ntp-sync
+description: Set timezone and configure NTP synchronization
+tags: [configuration, ntp, timezone, linux, time-sync]
+tool: ansible
+cloud_provider: agnostic
+os_family: agnostic
+risk_level: low
+compliance_tags: [SOC2]
+
+vars:
+  INVENTORY_GROUP: "{{INVENTORY_GROUP}}"
+  TIMEZONE: "{{TIMEZONE}}"
+  NTP_SERVERS: "{{NTP_SERVERS}}"
+
+playbook: |
+  ---
+  - hosts: "{{ inventory_group }}"
+    become: true
+    tasks:
+      - name: Set system timezone
+        timezone:
+          name: "{{ timezone | default('UTC') }}"
+
+      - name: Install chrony for NTP sync
+        apt:
+          name: chrony
+          state: present
+          update_cache: yes
+
+      - name: Configure NTP servers
+        copy:
+          dest: /etc/chrony/chrony.conf
+          content: |
+            # Managed by Ansible
+            {% for server in (ntp_servers | default('pool.ntp.org')).split(',') %}
+            server {{ server | trim }} iburst
+            {% endfor %}
+            driftfile /var/lib/chrony/drift
+            makestep 1.0 3
+            rtcsync
+            logdir /var/log/chrony
+        notify: restart chrony
+
+      - name: Enable chrony service
+        systemd:
+          name: chrony
+          enabled: yes
+          state: started
+
+      - name: Verify time synchronization
+        command: chronyc tracking
+        register: ntp_status
+        changed_when: false
+
+      - name: Display sync status
+        debug:
+          var: ntp_status.stdout_lines
+
+    handlers:
+      - name: restart chrony
+        systemd:
+          name: chrony
+          state: restarted

@@ -1,0 +1,231 @@
+name: Validate Submission
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check file types
+        run: |
+          INVALID_FILES=$(find . -not -path './.git/*' -not -path './.github/*' -not -path './.next/*' -type f \
+            ! -name '*.yml' ! -name '*.md' ! -name '*.html' ! -name '*.css' ! -name '*.js' \
+            ! -name '*.mjs' ! -name '*.ts' ! -name '*.tsx' ! -name '*.d.ts' ! -name '*.json' ! -name '*.sql' \
+            ! -name '*.svg' ! -name '*.png' ! -name '*.jpg' ! -name '*.jpeg' ! -name '*.webp' \
+            ! -name '*.txt' ! -name 'LICENSE' ! -name '.gitignore' \
+            | head -20)
+          if [ -n "$INVALID_FILES" ]; then
+            echo "::error::Unexpected file types detected in submission:"
+            echo "$INVALID_FILES"
+            exit 1
+          fi
+
+      - name: Check file sizes
+        run: |
+          LARGE_FILES=$(find . -not -path './.git/*' -not -path './.github/*' -not -path './node_modules/*' -not -path './.next/*' -type f \
+            \( -name '*.yml' -o -name '*.md' \) -size +50k | head -20)
+          if [ -n "$LARGE_FILES" ]; then
+            echo "::error::.yml/.md files over 50KB are not allowed:"
+            echo "$LARGE_FILES"
+            exit 1
+          fi
+
+      - name: Scan for credential patterns in variables
+        run: |
+          SUSPICIOUS=$(find . -name '*.yml' -not -path './.github/*' -print0 | \
+            xargs -0 grep -n '{{.*\(PASSWORD\|SECRET\|TOKEN\|KEY\|API_KEY\|CREDENTIAL\|AUTH_TOKEN\|PRIVATE\|ACCESS_KEY\|SECRET_KEY\).*}}' || true)
+          if [ -n "$SUSPICIOUS" ]; then
+            echo "::warning::Suspicious variable patterns detected (may reference credentials):"
+            echo "$SUSPICIOUS"
+            echo ""
+            echo "These patterns reference common credential names."
+            echo "Maintainer: verify these are template variables, not credential extraction attempts."
+            echo "If safe, a maintainer may allow this PR."
+          fi
+
+      - name: Scan for dangerous commands
+        run: |
+          DANGEROUS=$(find . -name '*.yml' -not -path './.github/*' -print0 | \
+            xargs -0 grep -nE '(rm\s+-rf|dd\s+if=|mkfs\.|iptables\s+-F|DROP\s+TABLE|shutdown\s|init\s+0|halt\s)' || true)
+          if [ -n "$DANGEROUS" ]; then
+            echo "::warning::Potentially dangerous commands detected:"
+            echo "$DANGEROUS"
+            echo ""
+            echo "These commands can cause data loss or service disruption."
+            echo "Maintainer: verify these are properly guarded with conditions and appropriate risk_level."
+          fi
+
+      - name: Scan for hardcoded IPs and external URLs
+        run: |
+          # Check for hardcoded IPs (excluding loopback and common private patterns in comments)
+          HARDCODED_IPS=$(find . -name '*.yml' -not -path './.github/*' -print0 | \
+            xargs -0 grep -nE '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | \
+            grep -vE '(127\.0\.0\.1|0\.0\.0\.0|#.*[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)' || true)
+          if [ -n "$HARDCODED_IPS" ]; then
+            echo "::warning::Hardcoded IP addresses detected:"
+            echo "$HARDCODED_IPS"
+            echo ""
+            echo "Playbooks should use variables instead of hardcoded IPs."
+            echo "Maintainer: verify these are safe defaults (DNS servers, etc.)."
+          fi
+
+          # Check for external URLs
+          URLS=$(find . -name '*.yml' -not -path './.github/*' -print0 | \
+            xargs -0 grep -hoE 'https?://[^[:space:]"]+' || true)
+          BLOCKED=""
+          for url in $URLS; do
+            DOMAIN=$(echo "$url" | sed -E 's|https?://([^/:]+).*|\1|' | tr '[:upper:]' '[:lower:]')
+            case "$DOMAIN" in
+              localhost|127.0.0.1|0.0.0.0) continue ;;
+              example.com|*.example.com) continue ;;
+              download.docker.com|github.com|*.github.com) continue ;;
+              *.ubuntu.com|*.debian.org) continue ;;
+              pool.ntp.org|*.pool.ntp.org) continue ;;
+            esac
+            BLOCKED="${BLOCKED}\n  ${url}"
+          done
+          if [ -n "$BLOCKED" ]; then
+            echo "::warning::URLs pointing to non-allowlisted domains detected:"
+            echo -e "$BLOCKED"
+            echo ""
+            echo "Maintainer: verify these URLs are safe and necessary."
+          fi
+
+      - name: Validate YAML syntax
+        run: |
+          python3 -m pip install --quiet pyyaml
+          ERRORS=""
+          for file in $(find . -name '*.yml' -not -path './.github/*'); do
+            python3 -c "
+          import yaml, sys
+          file = sys.argv[1]
+          try:
+              with open(file) as f:
+                  yaml.safe_load(f)
+          except yaml.YAMLError as e:
+              print(f'Invalid YAML: {file}')
+              print(str(e))
+              sys.exit(1)
+          " "$file" 2>&1 || ERRORS="${ERRORS}\n  ${file}"
+          done
+          if [ -n "$ERRORS" ]; then
+            echo "::error::YAML parsing failed for:"
+            echo -e "$ERRORS"
+            exit 1
+          fi
+          echo "All YAML files are valid."
+
+      - name: Validate playbook schema
+        run: |
+          PLAYBOOK_DIRS="patching provisioning security monitoring containers networking backup configuration ci-cd"
+          ERRORS=""
+          for dir in $PLAYBOOK_DIRS; do
+            [ -d "$dir" ] || continue
+            for file in "$dir"/*.yml; do
+              [ -f "$file" ] || continue
+              python3 -c "
+          import yaml, sys, os
+          file = sys.argv[1]
+
+          VALID_TOOLS = {'ansible', 'terraform', 'docker-compose', 'k8s'}
+          VALID_RISK_LEVELS = {'low', 'medium', 'high'}
+          VALID_CLOUD_PROVIDERS = {'aws', 'gcp', 'azure', 'agnostic'}
+
+          with open(file) as f:
+              doc = yaml.safe_load(f)
+
+          errors = []
+
+          if not isinstance(doc, dict):
+              errors.append('Document must be a YAML mapping')
+          else:
+              name = doc.get('name')
+              if not name or not isinstance(name, str):
+                  errors.append('Missing or empty \"name\" field')
+
+              desc = doc.get('description')
+              if not desc or not isinstance(desc, str):
+                  errors.append('Missing or empty \"description\" field')
+
+              tags = doc.get('tags')
+              if not isinstance(tags, list) or len(tags) == 0:
+                  errors.append('Missing or empty \"tags\" field (must be a non-empty list)')
+
+              tool = doc.get('tool')
+              if not tool or tool not in VALID_TOOLS:
+                  errors.append(f'Invalid \"tool\" field: {tool}. Must be one of: {VALID_TOOLS}')
+
+              risk = doc.get('risk_level')
+              if not risk or risk not in VALID_RISK_LEVELS:
+                  errors.append(f'Invalid \"risk_level\" field: {risk}. Must be one of: {VALID_RISK_LEVELS}')
+
+              playbook = doc.get('playbook')
+              if not playbook or not isinstance(playbook, str):
+                  errors.append('Missing or empty \"playbook\" field (must contain playbook YAML)')
+              else:
+                  try:
+                      pb = yaml.safe_load(playbook)
+                      if isinstance(pb, list):
+                          for play in pb:
+                              if isinstance(play, dict):
+                                  if 'tasks' not in play and 'roles' not in play:
+                                      errors.append('Playbook plays must contain \"tasks\" or \"roles\"')
+                      elif isinstance(pb, dict):
+                          if 'tasks' not in pb and 'roles' not in pb:
+                              errors.append('Playbook must contain \"tasks\" or \"roles\"')
+                      else:
+                          errors.append('Playbook content must be a YAML list or mapping')
+                  except yaml.YAMLError:
+                      pass  # Jinja templates may cause parse errors, skip
+
+          if errors:
+              print(f'Schema errors in {file}:')
+              for e in errors:
+                  print(f'  - {e}')
+              sys.exit(1)
+          " "$file" 2>&1 || ERRORS="${ERRORS}\n  ${file}"
+            done
+          done
+          if [ -n "$ERRORS" ]; then
+            echo "::error::Playbook schema validation failed for:"
+            echo -e "$ERRORS"
+            exit 1
+          fi
+          echo "All playbook templates pass schema validation."
+
+      - name: Validate filename matches name field
+        run: |
+          PLAYBOOK_DIRS="patching provisioning security monitoring containers networking backup configuration ci-cd"
+          ERRORS=""
+          for dir in $PLAYBOOK_DIRS; do
+            [ -d "$dir" ] || continue
+            for file in "$dir"/*.yml; do
+              [ -f "$file" ] || continue
+              python3 -c "
+          import yaml, sys, os
+          file = sys.argv[1]
+          basename = os.path.splitext(os.path.basename(file))[0]
+
+          with open(file) as f:
+              doc = yaml.safe_load(f)
+
+          if isinstance(doc, dict):
+              name = doc.get('name', '')
+              if isinstance(name, str) and name and name != basename:
+                  print(f'Filename mismatch: {file}')
+                  print(f'  filename: {basename}')
+                  print(f'  name field: {name}')
+                  sys.exit(1)
+          " "$file" 2>&1 || ERRORS="${ERRORS}\n  ${file}"
+            done
+          done
+          if [ -n "$ERRORS" ]; then
+            echo "::error::Playbook filename does not match name: field for:"
+            echo -e "$ERRORS"
+            exit 1
+          fi
+          echo "All playbook filenames match their name: field."
