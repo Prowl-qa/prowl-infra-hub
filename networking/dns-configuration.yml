@@ -1,0 +1,73 @@
+# DNS Configuration
+# Configures DNS resolvers and /etc/hosts entries for consistent name
+# resolution across your fleet. Supports both systemd-resolved and
+# direct resolv.conf configuration.
+#
+# Customize:
+#   - Set INVENTORY_GROUP to target hosts
+#   - Set DNS_SERVERS as a comma-separated list of resolver IPs
+#   - Set HOSTS_ENTRIES as additional /etc/hosts lines (optional)
+
+name: dns-configuration
+description: Configure DNS resolvers and /etc/hosts entries
+tags: [networking, dns, resolv.conf, linux, configuration]
+tool: ansible
+cloud_provider: agnostic
+os_family: agnostic
+risk_level: low
+compliance_tags: []
+
+vars:
+  INVENTORY_GROUP: "{{INVENTORY_GROUP}}"
+  DNS_SERVERS: "{{DNS_SERVERS}}"
+  SEARCH_DOMAIN: "{{SEARCH_DOMAIN}}"
+
+playbook: |
+  ---
+  - hosts: "{{ inventory_group }}"
+    become: true
+    vars:
+      resolvers: "{{ (dns_servers | default('1.1.1.1,8.8.8.8')).split(',') }}"
+    tasks:
+      - name: Check if systemd-resolved is active
+        command: systemctl is-active systemd-resolved
+        register: resolved_status
+        changed_when: false
+        failed_when: false
+
+      - name: Configure systemd-resolved
+        template:
+          dest: /etc/systemd/resolved.conf.d/custom.conf
+          content: |
+            [Resolve]
+            DNS={{ resolvers | join(' ') }}
+            {% if search_domain is defined %}
+            Domains={{ search_domain }}
+            {% endif %}
+        when: resolved_status.rc == 0
+        notify: restart systemd-resolved
+
+      - name: Configure resolv.conf directly
+        template:
+          dest: /etc/resolv.conf
+          content: |
+            # Managed by Ansible
+            {% if search_domain is defined %}
+            search {{ search_domain }}
+            {% endif %}
+            {% for server in resolvers %}
+            nameserver {{ server }}
+            {% endfor %}
+        when: resolved_status.rc != 0
+
+      - name: Verify DNS resolution
+        command: nslookup example.com
+        register: dns_test
+        changed_when: false
+        failed_when: dns_test.rc != 0
+
+    handlers:
+      - name: restart systemd-resolved
+        systemd:
+          name: systemd-resolved
+          state: restarted
