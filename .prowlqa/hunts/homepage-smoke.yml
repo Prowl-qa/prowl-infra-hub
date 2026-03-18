@@ -1,0 +1,45 @@
+# Homepage Smoke Test
+# Verifies the landing page loads with all key sections visible.
+
+name: homepage-smoke
+description: Verify the infra hub landing page loads with hero, metrics, featured playbooks, and quality sections
+tags:
+  - smoke
+  - homepage
+
+steps:
+  - navigate: "/"
+
+  - waitForNetworkIdle:
+      timeout: 5000
+
+  # Hero section
+  - wait: "Find and share reusable infrastructure automation playbooks."
+
+  - assert:
+      visible: "Explore verified playbooks"
+
+  - assert:
+      visible: "Submit through PR"
+
+  # Metrics section
+  - waitForSelector:
+      selector: "section[aria-label='Catalog statistics']"
+
+  - wait: "Verified playbooks"
+  - wait: "Categories covered"
+
+  # Featured section
+  - wait: "Curated community playbooks"
+
+  - waitForSelector:
+      selector: ".featured-grid .playbook-card"
+
+  # Quality section
+  - wait: "Verified-only publishing"
+  - wait: "Security review"
+  - wait: "Risk-level classification"
+
+assertions:
+  - noConsoleErrors: true
+  - urlEquals: "http://localhost:3004/"
