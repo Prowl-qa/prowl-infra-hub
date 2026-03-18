@@ -1,0 +1,23 @@
+# ProwlQA config for testing the Prowl Infra Hub site
+# Run the dev server first: npm run dev (port 3004)
+
+target:
+  url: "http://localhost:3004"
+
+guardrails:
+  allowedDomains:
+    - "localhost"
+  maxSteps: 30
+
+assertions:
+  maxTotalTimeMs: 30000
+
+artifacts:
+  screenshots: "on-failure"
+  console: true
+  networkHar: true
+  junit: true
+
+browser:
+  engine: chromium
+  viewport: desktop

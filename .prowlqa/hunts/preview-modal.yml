@@ -1,0 +1,53 @@
+# Preview Modal — YAML Preview and Actions
+# Opens a playbook card's preview modal and verifies YAML content loads.
+
+name: preview-modal
+description: Open a playbook preview modal and verify YAML content, copy button, and download link
+tags:
+  - browse
+  - modal
+  - preview
+
+steps:
+  - navigate: "/browse"
+
+  - waitForNetworkIdle:
+      timeout: 5000
+
+  # Wait for playbook cards to render
+  - waitForSelector:
+      selector: ".playbook-card"
+
+  # Click the first "Preview YAML" button
+  - click: "Preview YAML"
+
+  # Modal should open
+  - waitForSelector:
+      selector: "[role='dialog']"
+      timeout: 3000
+
+  # Modal title renders
+  - waitForSelector:
+      selector: "#preview-title"
+
+  # YAML content loads (wait for the code block to have content beyond "Loading...")
+  - waitForSelector:
+      selector: "[role='dialog'] pre code"
+      timeout: 5000
+
+  # Action buttons are present
+  - assert:
+      visible: "Copy YAML"
+
+  - assert:
+      visible: "Download file"
+
+  # Close the modal
+  - click: "Close"
+
+  # Modal should be gone
+  - assert:
+      notVisible: "[role='dialog']"
+
+assertions:
+  - noConsoleErrors: true
