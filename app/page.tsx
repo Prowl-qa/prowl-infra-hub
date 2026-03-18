@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import Link from 'next/link';
 
 import PlaybookCard from '@/components/playbook-card';
@@ -75,6 +76,14 @@ playbook: |
             </code>
           </pre>
           <p className="code-note">Curated Ansible playbooks, ready for your infrastructure.</p>
+          <Image
+            src="/assets/brand/mascot-hero.png"
+            alt=""
+            width={150}
+            height={150}
+            className="hero-mascot"
+            aria-hidden="true"
+          />
         </aside>
       </section>
 

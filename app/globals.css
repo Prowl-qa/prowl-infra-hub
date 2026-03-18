@@ -232,6 +232,16 @@ main {
   background: radial-gradient(circle, rgba(99, 102, 241, 0.3), transparent 72%);
 }
 
+.hero-mascot {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 150px;
+  height: auto;
+  pointer-events: none;
+  z-index: 0;
+}
+
 .code-head {
   position: relative;
   z-index: 1;
