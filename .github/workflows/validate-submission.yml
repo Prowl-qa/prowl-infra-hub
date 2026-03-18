@@ -125,8 +125,7 @@ jobs:
           ERRORS=""
           for dir in $PLAYBOOK_DIRS; do
             [ -d "$dir" ] || continue
-            for file in "$dir"/*.yml; do
-              [ -f "$file" ] || continue
+            while IFS= read -r -d '' file; do
               python3 -c "
           import yaml, sys, os
           file = sys.argv[1]
@@ -188,7 +187,7 @@ jobs:
                   print(f'  - {e}')
               sys.exit(1)
           " "$file" 2>&1 || ERRORS="${ERRORS}\n  ${file}"
-            done
+            done < <(find "$dir" -type f -name '*.yml' -print0)
           done
           if [ -n "$ERRORS" ]; then
             echo "::error::Playbook schema validation failed for:"
@@ -203,8 +202,7 @@ jobs:
           ERRORS=""
           for dir in $PLAYBOOK_DIRS; do
             [ -d "$dir" ] || continue
-            for file in "$dir"/*.yml; do
-              [ -f "$file" ] || continue
+            while IFS= read -r -d '' file; do
               python3 -c "
           import yaml, sys, os
           file = sys.argv[1]
@@ -221,7 +219,7 @@ jobs:
                   print(f'  name field: {name}')
                   sys.exit(1)
           " "$file" 2>&1 || ERRORS="${ERRORS}\n  ${file}"
-            done
+            done < <(find "$dir" -type f -name '*.yml' -print0)
           done
           if [ -n "$ERRORS" ]; then
             echo "::error::Playbook filename does not match name: field for:"
