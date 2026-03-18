@@ -1,0 +1,23 @@
+# API Health Check
+# Verifies the /api/playbooks endpoint returns a valid response.
+# Note: Chromium renders JSON via a built-in viewer — raw text locators
+# are unreliable. Instead, verify the endpoint responds without network errors.
+
+name: api-health
+description: Navigate to the playbooks API endpoint and verify it responds without errors
+tags:
+  - smoke
+  - api
+
+steps:
+  - navigate: "/api/playbooks"
+
+  - waitForNetworkIdle:
+      timeout: 5000
+
+  # Verify the page rendered something (Chromium wraps JSON in a <body> or <pre>)
+  - waitForSelector:
+      selector: "body"
+
+assertions:
+  - noNetworkErrors: true

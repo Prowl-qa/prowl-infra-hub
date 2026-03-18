@@ -1,0 +1,82 @@
+# Browse Page — Search and Category Filtering
+# Verifies the browse page loads, search filters results, and category chips work.
+
+name: browse-and-filter
+description: Test the browse page search input, category chips, and filter dropdowns
+tags:
+  - browse
+  - search
+  - filtering
+
+steps:
+  - navigate: "/browse"
+
+  - waitForNetworkIdle:
+      timeout: 5000
+
+  # Search input is present
+  - waitForSelector:
+      selector: "#browse-search"
+
+  # Category chips are visible
+  - waitForSelector:
+      selector: "[role='list'][aria-label='Categories']"
+
+  # Filter dropdowns are present
+  - waitForSelector:
+      selector: "#filter-tool"
+
+  - waitForSelector:
+      selector: "#filter-risk"
+
+  - waitForSelector:
+      selector: "#filter-cloud"
+
+  # Results count shows
+  - waitForSelector:
+      selector: ".results-count"
+
+  # Playbook cards render
+  - waitForSelector:
+      selector: ".playbook-card"
+
+  # Search for "ssh" — should filter results
+  - fill:
+      selector: "#browse-search"
+      value: "ssh"
+
+  - wait:
+      for: "Ssh"
+      timeout: 3000
+
+  # Clear search and filter by category
+  - fill:
+      selector: "#browse-search"
+      value: ""
+
+  - click: "Security"
+
+  - waitForUrl:
+      value: "category=security"
+      timeout: 3000
+
+  # Switch to "All" to reset
+  - click: "All"
+
+  # Test tool filter dropdown
+  - selectOption:
+      selector: "#filter-tool"
+      value: "ansible"
+
+  - waitForUrl:
+      value: "tool=ansible"
+      timeout: 3000
+
+  # Reset tool filter
+  - selectOption:
+      selector: "#filter-tool"
+      value: "all"
+
+assertions:
+  - noConsoleErrors: true
+  - urlIncludes: "/browse"

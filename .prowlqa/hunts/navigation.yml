@@ -1,0 +1,49 @@
+# Navigation — Header Links and Routing
+# Verifies all primary nav links route to the correct pages/sections.
+
+name: navigation
+description: Test primary navigation links route correctly between pages
+tags:
+  - smoke
+  - navigation
+
+steps:
+  - navigate: "/"
+
+  - waitForNetworkIdle:
+      timeout: 5000
+
+  # Header is present with brand
+  - waitForSelector:
+      selector: ".site-header"
+
+  - assert:
+      visible: "Prowl Infra Hub"
+
+  # Navigate to Browse via nav link
+  - click: "Browse playbooks"
+
+  - waitForUrl:
+      value: "/browse"
+      timeout: 5000
+
+  - waitForSelector:
+      selector: "#browse-search"
+
+  # Navigate back home via brand link
+  - click:
+      selector: ".brand"
+
+  - waitForUrl:
+      value: "/"
+      timeout: 5000
+
+  # Click "Explore verified playbooks" CTA
+  - click: "Explore verified playbooks"
+
+  - waitForUrl:
+      value: "/browse"
+      timeout: 5000
+
+assertions:
+  - noConsoleErrors: true
