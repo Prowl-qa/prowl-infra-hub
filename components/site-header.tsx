@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function SiteHeader() {
   return (
@@ -10,6 +11,7 @@ export default function SiteHeader() {
       <header className="site-header">
         <div className="container nav-shell">
           <Link href="/" className="brand" aria-label="Prowl Infra Hub home">
+            <Image src="/assets/brand/mascot.png" alt="" width={34} height={34} />
             <span>Prowl Infra Hub</span>
           </Link>
 

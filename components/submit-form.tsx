@@ -102,14 +102,14 @@ export default function SubmitForm() {
       </div>
 
       <form className="submit-form" onSubmit={handleSubmit} noValidate>
-        <label>
-          Playbook name
-          <input name="name" required placeholder="ex: rolling-os-update" />
-        </label>
+        <div className="form-field">
+          <label htmlFor="submit-name">Playbook name</label>
+          <input id="submit-name" name="name" required placeholder="ex: rolling-os-update" />
+        </div>
 
-        <label>
-          Category
-          <select name="category" required>
+        <div className="form-field">
+          <label htmlFor="submit-category">Category</label>
+          <select id="submit-category" name="category" required>
             <option value="">Select category</option>
             {PLAYBOOK_CATEGORY_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -117,22 +117,23 @@ export default function SubmitForm() {
               </option>
             ))}
           </select>
-        </label>
+        </div>
 
-        <label>
-          Short description
-          <input name="description" required placeholder="What does this playbook automate?" />
-        </label>
+        <div className="form-field">
+          <label htmlFor="submit-description">Short description</label>
+          <input id="submit-description" name="description" required placeholder="What does this playbook automate?" />
+        </div>
 
-        <label>
-          Playbook YAML
+        <div className="form-field">
+          <label htmlFor="submit-yaml">Playbook YAML</label>
           <textarea
+            id="submit-yaml"
             name="yaml"
             rows={10}
             required
             placeholder="Paste your playbook YAML here..."
           ></textarea>
-        </label>
+        </div>
 
         <fieldset>
           <legend>Required before PR</legend>
