@@ -50,6 +50,11 @@ const rootDir = process.cwd();
 const PLAYBOOKS_ROOT = rootDir;
 const newThresholdMs = 30 * 24 * 60 * 60 * 1000;
 
+function isPathWithin(parent: string, child: string): boolean {
+  const relative = path.relative(parent, child);
+  return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+}
+
 function getFieldValue(content: string, key: string) {
   const match = content.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'));
   return match ? match[1].trim() : '';
@@ -242,8 +247,37 @@ export function sanitizePublishedPath(rawPath: string): string | null {
   return resolved;
 }
 
-export async function readPublishedPlaybook(rawPath: string): Promise<string | null> {
+async function resolvePublishedPath(rawPath: string): Promise<string | null> {
   const safePath = sanitizePublishedPath(rawPath);
+  if (!safePath) {
+    return null;
+  }
+
+  const relativePath = path.relative(PLAYBOOKS_ROOT, safePath);
+  const [category] = relativePath.split(path.sep);
+
+  if (!category || !PUBLISHED_DIRS.includes(category as PlaybookCategory)) {
+    return null;
+  }
+
+  try {
+    const [realPath, realCategoryRoot] = await Promise.all([
+      fs.realpath(safePath),
+      fs.realpath(path.join(PLAYBOOKS_ROOT, category)),
+    ]);
+
+    if (path.extname(realPath) !== '.yml' || !isPathWithin(realCategoryRoot, realPath)) {
+      return null;
+    }
+
+    return realPath;
+  } catch {
+    return null;
+  }
+}
+
+export async function readPublishedPlaybook(rawPath: string): Promise<string | null> {
+  const safePath = await resolvePublishedPath(rawPath);
   if (!safePath) {
     return null;
   }
