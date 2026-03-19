@@ -1,0 +1,231 @@
+# Loki + Promtail Log Aggregation
+# Kubernetes manifests for deploying Loki log aggregation with Promtail as the log collector
+#
+# Customize:
+#   - LOKI_NAMESPACE: Kubernetes namespace for the Loki stack
+#   - STORAGE_SIZE: Persistent volume storage size for Loki data
+#   - RETENTION_PERIOD: Log retention period (e.g., 720h for 30 days)
+
+name: loki-log-aggregation
+description: Kubernetes manifests for Loki and Promtail log aggregation stack
+tags: [monitoring, logging, loki, promtail, kubernetes, observability, log-aggregation]
+tool: k8s
+cloud_provider: agnostic
+os_family: agnostic
+risk_level: low
+compliance_tags: []
+
+vars:
+  LOKI_NAMESPACE: "{{LOKI_NAMESPACE}}"
+  STORAGE_SIZE: "{{STORAGE_SIZE}}"
+  RETENTION_PERIOD: "{{RETENTION_PERIOD}}"
+
+playbook: |
+  ---
+  apiVersion: v1
+  kind: Namespace
+  metadata:
+    name: "{{LOKI_NAMESPACE}}"
+    labels:
+      app.kubernetes.io/name: loki
+      app.kubernetes.io/component: logging
+  ---
+  apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: loki-config
+    namespace: "{{LOKI_NAMESPACE}}"
+  data:
+    loki.yaml: |
+      auth_enabled: false
+      server:
+        http_listen_port: 3100
+      common:
+        path_prefix: /loki
+        storage:
+          filesystem:
+            chunks_directory: /loki/chunks
+            rules_directory: /loki/rules
+        replication_factor: 1
+        ring:
+          kvstore:
+            store: inmemory
+      schema_config:
+        configs:
+          - from: "2020-10-24"
+            store: boltdb-shipper
+            object_store: filesystem
+            schema: v11
+            index:
+              prefix: index_
+              period: 24h
+      limits_config:
+        retention_period: "{{RETENTION_PERIOD}}"
+      compactor:
+        working_directory: /loki/compactor
+        retention_enabled: true
+  ---
+  apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: promtail-config
+    namespace: "{{LOKI_NAMESPACE}}"
+  data:
+    promtail.yaml: |
+      server:
+        http_listen_port: 9080
+        grpc_listen_port: 0
+      positions:
+        filename: /tmp/positions.yaml
+      clients:
+        - url: http://loki:3100/loki/api/v1/push
+      scrape_configs:
+        - job_name: kubernetes-pods
+          kubernetes_sd_configs:
+            - role: pod
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_pod_label_app]
+              target_label: app
+            - source_labels: [__meta_kubernetes_namespace]
+              target_label: namespace
+            - source_labels: [__meta_kubernetes_pod_name]
+              target_label: pod
+  ---
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: loki
+    namespace: "{{LOKI_NAMESPACE}}"
+  spec:
+    type: ClusterIP
+    ports:
+      - port: 3100
+        targetPort: 3100
+        protocol: TCP
+        name: http
+    selector:
+      app: loki
+  ---
+  apiVersion: apps/v1
+  kind: StatefulSet
+  metadata:
+    name: loki
+    namespace: "{{LOKI_NAMESPACE}}"
+  spec:
+    serviceName: loki
+    replicas: 1
+    selector:
+      matchLabels:
+        app: loki
+    template:
+      metadata:
+        labels:
+          app: loki
+      spec:
+        containers:
+          - name: loki
+            image: grafana/loki:2.9.0
+            ports:
+              - containerPort: 3100
+                name: http
+            volumeMounts:
+              - name: loki-config
+                mountPath: /etc/loki
+              - name: loki-data
+                mountPath: /loki
+            args:
+              - "-config.file=/etc/loki/loki.yaml"
+            resources:
+              requests:
+                cpu: 250m
+                memory: 256Mi
+              limits:
+                cpu: 500m
+                memory: 512Mi
+        volumes:
+          - name: loki-config
+            configMap:
+              name: loki-config
+    volumeClaimTemplates:
+      - metadata:
+          name: loki-data
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: "{{STORAGE_SIZE}}"
+  ---
+  apiVersion: apps/v1
+  kind: DaemonSet
+  metadata:
+    name: promtail
+    namespace: "{{LOKI_NAMESPACE}}"
+  spec:
+    selector:
+      matchLabels:
+        app: promtail
+    template:
+      metadata:
+        labels:
+          app: promtail
+      spec:
+        serviceAccountName: promtail
+        containers:
+          - name: promtail
+            image: grafana/promtail:2.9.0
+            args:
+              - "-config.file=/etc/promtail/promtail.yaml"
+            volumeMounts:
+              - name: promtail-config
+                mountPath: /etc/promtail
+              - name: varlog
+                mountPath: /var/log
+                readOnly: true
+              - name: containers
+                mountPath: /var/lib/docker/containers
+                readOnly: true
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: 200m
+                memory: 256Mi
+        volumes:
+          - name: promtail-config
+            configMap:
+              name: promtail-config
+          - name: varlog
+            hostPath:
+              path: /var/log
+          - name: containers
+            hostPath:
+              path: /var/lib/docker/containers
+  ---
+  apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    name: promtail
+    namespace: "{{LOKI_NAMESPACE}}"
+  ---
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRole
+  metadata:
+    name: promtail
+  rules:
+    - apiGroups: [""]
+      resources: ["nodes", "services", "pods"]
+      verbs: ["get", "watch", "list"]
+  ---
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRoleBinding
+  metadata:
+    name: promtail
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: promtail
+  subjects:
+    - kind: ServiceAccount
+      name: promtail
+      namespace: "{{LOKI_NAMESPACE}}"

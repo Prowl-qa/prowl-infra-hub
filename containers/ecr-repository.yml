@@ -1,0 +1,94 @@
+# ECR Repository
+# Creates an AWS Elastic Container Registry repository with image scanning
+# enabled and a lifecycle policy to manage image retention. Supports both
+# mutable and immutable image tags.
+#
+# Customize:
+#   - Set AWS_REGION to your target AWS region
+#   - Set REPOSITORY_NAME to the desired ECR repository name
+#   - Set IMAGE_RETENTION_COUNT to control how many images to keep
+
+name: ecr-repository
+description: AWS ECR repository with lifecycle policy for image retention
+tags: [containers, ecr, aws, docker, registry, terraform]
+tool: terraform
+cloud_provider: aws
+os_family: agnostic
+risk_level: low
+compliance_tags: []
+
+vars:
+  AWS_REGION: "{{AWS_REGION}}"
+  REPOSITORY_NAME: "{{REPOSITORY_NAME}}"
+  IMAGE_RETENTION_COUNT: "{{IMAGE_RETENTION_COUNT}}"
+
+playbook: |
+  provider "aws" {
+    region = var.aws_region
+  }
+
+  variable "aws_region" {
+    description = "AWS region for the ECR repository"
+    type        = string
+    default     = "us-east-1"
+  }
+
+  variable "repository_name" {
+    description = "Name of the ECR repository"
+    type        = string
+  }
+
+  variable "image_retention_count" {
+    description = "Number of images to retain in the repository"
+    type        = number
+    default     = 30
+  }
+
+  resource "aws_ecr_repository" "this" {
+    name                 = var.repository_name
+    image_tag_mutability = "IMMUTABLE"
+
+    image_scanning_configuration {
+      scan_on_push = true
+    }
+
+    encryption_configuration {
+      encryption_type = "AES256"
+    }
+
+    tags = {
+      Name      = var.repository_name
+      ManagedBy = "terraform"
+    }
+  }
+
+  resource "aws_ecr_lifecycle_policy" "this" {
+    repository = aws_ecr_repository.this.name
+
+    policy = jsonencode({
+      rules = [
+        {
+          rulePriority = 1
+          description  = "Keep only the last ${var.image_retention_count} images"
+          selection = {
+            tagStatus   = "any"
+            countType   = "imageCountMoreThan"
+            countNumber = var.image_retention_count
+          }
+          action = {
+            type = "expire"
+          }
+        }
+      ]
+    })
+  }
+
+  output "repository_url" {
+    description = "The URL of the ECR repository"
+    value       = aws_ecr_repository.this.repository_url
+  }
+
+  output "repository_arn" {
+    description = "The ARN of the ECR repository"
+    value       = aws_ecr_repository.this.arn
+  }

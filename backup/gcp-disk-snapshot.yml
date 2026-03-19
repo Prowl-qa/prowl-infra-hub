@@ -1,0 +1,105 @@
+# GCP Disk Snapshot
+# Terraform configuration to create GCP persistent disk snapshots with an
+# automated snapshot schedule using a resource policy.
+#
+# Customize:
+#   - Set GCP_PROJECT to your Google Cloud project ID
+#   - Set GCP_REGION to the target region
+#   - Set DISK_NAME to the persistent disk to snapshot
+#   - Set SNAPSHOT_SCHEDULE for the cron-style schedule expression
+
+name: gcp-disk-snapshot
+description: GCP persistent disk snapshot schedule via Terraform
+tags: [backup, gcp, snapshot, terraform, disk]
+tool: terraform
+cloud_provider: gcp
+os_family: agnostic
+risk_level: medium
+compliance_tags: [SOC2]
+
+vars:
+  GCP_PROJECT: "{{GCP_PROJECT}}"
+  GCP_REGION: "{{GCP_REGION}}"
+  DISK_NAME: "{{DISK_NAME}}"
+  SNAPSHOT_SCHEDULE: "{{SNAPSHOT_SCHEDULE}}"
+
+playbook: |
+  provider "google" {
+    project = var.gcp_project
+    region  = var.gcp_region
+  }
+
+  variable "gcp_project" {
+    description = "GCP project ID"
+    type        = string
+  }
+
+  variable "gcp_region" {
+    description = "GCP region for resources"
+    type        = string
+  }
+
+  variable "disk_name" {
+    description = "Name of the persistent disk to snapshot"
+    type        = string
+  }
+
+  variable "snapshot_schedule" {
+    description = "Cron schedule for snapshots (e.g., hourly, daily)"
+    type        = string
+    default     = "daily"
+  }
+
+  data "google_compute_disk" "target" {
+    name    = var.disk_name
+    project = var.gcp_project
+    zone    = "${var.gcp_region}-a"
+  }
+
+  resource "google_compute_snapshot" "disk_snapshot" {
+    name        = "${var.disk_name}-snapshot"
+    source_disk = data.google_compute_disk.target.self_link
+    zone        = "${var.gcp_region}-a"
+    project     = var.gcp_project
+
+    labels = {
+      managed-by = "terraform"
+      purpose    = "scheduled-backup"
+    }
+
+    storage_locations = [var.gcp_region]
+  }
+
+  resource "google_compute_resource_policy" "snapshot_schedule" {
+    name    = "${var.disk_name}-snapshot-schedule"
+    region  = var.gcp_region
+    project = var.gcp_project
+
+    snapshot_schedule_policy {
+      schedule {
+        daily_schedule {
+          days_in_cycle = 1
+          start_time    = "04:00"
+        }
+      }
+
+      retention_policy {
+        max_retention_days    = 14
+        on_source_disk_delete = "KEEP_AUTO_SNAPSHOTS"
+      }
+
+      snapshot_properties {
+        labels = {
+          managed-by = "terraform"
+        }
+        storage_locations = [var.gcp_region]
+      }
+    }
+  }
+
+  resource "google_compute_disk_resource_policy_attachment" "attachment" {
+    name    = google_compute_resource_policy.snapshot_schedule.name
+    disk    = var.disk_name
+    zone    = "${var.gcp_region}-a"
+    project = var.gcp_project
+  }
