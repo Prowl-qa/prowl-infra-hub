@@ -1,0 +1,95 @@
+# Docker Compose Web Application Stack
+# Deploy a generic web application stack with an app service, Redis cache, and Nginx reverse proxy
+#
+# Customize:
+#   - APP_IMAGE: Docker image for the application service
+#   - APP_PORT: Internal port the application listens on
+#   - REDIS_PORT: Host port for Redis access
+#   - DOMAIN: Domain name for Nginx reverse proxy configuration
+
+name: docker-compose-app-stack
+description: Docker Compose stack with web application, Redis cache, and Nginx reverse proxy
+tags: [docker-compose, web-app, redis, nginx, reverse-proxy, containers]
+tool: docker-compose
+cloud_provider: agnostic
+os_family: agnostic
+risk_level: low
+compliance_tags: []
+
+vars:
+  APP_IMAGE: "{{APP_IMAGE}}"
+  APP_PORT: "{{APP_PORT}}"
+  REDIS_PORT: "{{REDIS_PORT}}"
+  DOMAIN: "{{DOMAIN}}"
+
+playbook: |
+  ---
+  version: "3.8"
+
+  services:
+    app:
+      image: "{{APP_IMAGE}}"
+      container_name: app
+      restart: unless-stopped
+      expose:
+        - "{{APP_PORT}}"
+      environment:
+        - REDIS_URL=redis://redis:6379
+        - PORT={{APP_PORT}}
+      depends_on:
+        redis:
+          condition: service_healthy
+      networks:
+        - app-network
+      healthcheck:
+        test: ["CMD", "wget", "--spider", "-q", "http://localhost:{{APP_PORT}}/health"]
+        interval: 30s
+        timeout: 10s
+        retries: 3
+        start_period: 15s
+
+    redis:
+      image: redis:7-alpine
+      container_name: redis
+      restart: unless-stopped
+      ports:
+        - "{{REDIS_PORT}}:6379"
+      volumes:
+        - redis_data:/data
+      command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+      networks:
+        - app-network
+      healthcheck:
+        test: ["CMD", "redis-cli", "ping"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+
+    nginx:
+      image: nginx:stable-alpine
+      container_name: nginx
+      restart: unless-stopped
+      ports:
+        - "80:80"
+        - "443:443"
+      volumes:
+        - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+        - ./nginx/conf.d:/etc/nginx/conf.d:ro
+        - ./nginx/certs:/etc/nginx/certs:ro
+      depends_on:
+        app:
+          condition: service_healthy
+      networks:
+        - app-network
+      healthcheck:
+        test: ["CMD", "wget", "--spider", "-q", "http://localhost/health"]
+        interval: 30s
+        timeout: 10s
+        retries: 3
+
+  volumes:
+    redis_data:
+
+  networks:
+    app-network:
+      driver: bridge

@@ -1,0 +1,28 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: prowl-hub-postgres
+    restart: unless-stopped
+    ports:
+      - "5442:5432"
+    environment:
+      POSTGRES_USER: prowl
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: prowl_infra_hub
+    volumes:
+      - prowl_hub_pgdata:/var/lib/postgresql/data
+      - ./init-databases.sql:/docker-entrypoint-initdb.d/01-init-databases.sql:ro
+    networks:
+      - prowl-hub-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prowl -d prowl_infra_hub"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  prowl_hub_pgdata:
+
+networks:
+  prowl-hub-net:
+    name: prowl-hub-net

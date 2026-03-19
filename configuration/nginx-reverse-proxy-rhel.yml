@@ -1,0 +1,85 @@
+# Nginx Reverse Proxy (RHEL)
+# Configures Nginx as a reverse proxy on RHEL-based systems. Installs Nginx
+# via dnf, configures SELinux to allow network connections, and sets up
+# upstream forwarding with security headers.
+#
+# Customize:
+#   - Set INVENTORY_GROUP to target hosts
+#   - Set DOMAIN to your application's domain
+#   - Set BACKEND_HOST and BACKEND_PORT for the upstream service
+
+name: nginx-reverse-proxy-rhel
+description: Configure Nginx as a reverse proxy on RHEL with SELinux support
+tags: [configuration, nginx, reverse-proxy, rhel, selinux, linux]
+tool: ansible
+cloud_provider: agnostic
+os_family: rhel
+risk_level: medium
+compliance_tags: []
+
+vars:
+  INVENTORY_GROUP: "{{INVENTORY_GROUP}}"
+  DOMAIN: "{{DOMAIN}}"
+  BACKEND_HOST: "{{BACKEND_HOST}}"
+  BACKEND_PORT: "{{BACKEND_PORT}}"
+
+playbook: |
+  ---
+  - hosts: "{{ inventory_group }}"
+    become: true
+    vars:
+      upstream: "{{ backend_host | default('127.0.0.1') }}:{{ backend_port | default(3000) }}"
+    tasks:
+      - name: Install Nginx
+        dnf:
+          name: nginx
+          state: present
+
+      - name: Allow Nginx to make network connections via SELinux
+        command: setsebool -P httpd_can_network_connect on
+        changed_when: true
+
+      - name: Create Nginx site configuration
+        copy:
+          dest: "/etc/nginx/conf.d/{{ domain }}.conf"
+          content: |
+            upstream app_backend {
+                server {{ upstream }};
+            }
+
+            server {
+                listen 80;
+                server_name {{ domain }};
+
+                add_header X-Frame-Options DENY always;
+                add_header X-Content-Type-Options nosniff always;
+                add_header X-XSS-Protection "1; mode=block" always;
+
+                location / {
+                    proxy_pass http://app_backend;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                }
+
+                access_log /var/log/nginx/{{ domain }}.access.log;
+                error_log /var/log/nginx/{{ domain }}.error.log;
+            }
+        notify: reload nginx
+
+      - name: Test Nginx configuration
+        command: nginx -t
+        changed_when: false
+
+      - name: Enable and start Nginx
+        systemd:
+          name: nginx
+          enabled: yes
+          state: started
+
+    handlers:
+      - name: reload nginx
+        systemd:
+          name: nginx
+          state: reloaded

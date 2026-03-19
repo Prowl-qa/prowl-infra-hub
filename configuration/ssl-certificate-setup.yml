@@ -1,0 +1,72 @@
+# SSL Certificate Setup
+# Sets up Let's Encrypt SSL certificates using Certbot. Installs certbot,
+# obtains certificates via webroot authentication, configures automatic
+# renewal, and verifies the certificate is valid.
+#
+# Customize:
+#   - Set INVENTORY_GROUP to target hosts
+#   - Set DOMAIN to the domain requiring SSL
+#   - Set EMAIL for Let's Encrypt registration notifications
+#   - Set WEBROOT_PATH to the web server's document root
+
+name: ssl-certificate-setup
+description: Let's Encrypt SSL certificate provisioning with auto-renewal via certbot
+tags: [configuration, ssl, letsencrypt, certbot, security, linux]
+tool: ansible
+cloud_provider: agnostic
+os_family: debian
+risk_level: medium
+compliance_tags: []
+
+vars:
+  INVENTORY_GROUP: "{{INVENTORY_GROUP}}"
+  DOMAIN: "{{DOMAIN}}"
+  EMAIL: "{{EMAIL}}"
+  WEBROOT_PATH: "{{WEBROOT_PATH}}"
+
+playbook: |
+  ---
+  - hosts: "{{ inventory_group }}"
+    become: true
+    tasks:
+      - name: Install certbot and dependencies
+        apt:
+          name:
+            - certbot
+            - python3-certbot-nginx
+          state: present
+          update_cache: yes
+
+      - name: Create webroot directory
+        file:
+          path: "{{ webroot_path | default('/var/www/certbot') }}"
+          state: directory
+          owner: www-data
+          group: www-data
+          mode: "0755"
+
+      - name: Obtain SSL certificate via webroot
+        command: >
+          certbot certonly --webroot
+          -w {{ webroot_path | default('/var/www/certbot') }}
+          -d {{ domain }}
+          --email {{ email }}
+          --agree-tos
+          --non-interactive
+        args:
+          creates: "/etc/letsencrypt/live/{{ domain }}/fullchain.pem"
+
+      - name: Set up automatic certificate renewal cron job
+        cron:
+          name: "certbot-renew-{{ domain }}"
+          minute: "30"
+          hour: "2"
+          weekday: "1"
+          job: "certbot renew --quiet --post-hook 'systemctl reload nginx'"
+          user: root
+
+      - name: Verify certificate exists and is valid
+        command: "openssl x509 -noout -dates -in /etc/letsencrypt/live/{{ domain }}/fullchain.pem"
+        register: cert_info
+        changed_when: false
+        failed_when: cert_info.rc != 0

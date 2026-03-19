@@ -1,0 +1,91 @@
+# Docker Build Pipeline
+# Sets up a Docker build pipeline with BuildKit support and registry authentication
+#
+# Customize:
+#   - INVENTORY_GROUP: Target host group for pipeline setup
+#   - REGISTRY_URL: Container registry URL (e.g., registry.example.com)
+#   - REGISTRY_USER: Username for registry authentication
+#   - REGISTRY_PASSWORD: Password or token for registry authentication
+
+name: docker-build-pipeline
+description: Sets up a Docker build pipeline with BuildKit and registry auth
+tags: [ci-cd, docker, buildkit, pipeline, registry]
+tool: ansible
+cloud_provider: agnostic
+os_family: debian
+risk_level: low
+compliance_tags: []
+
+vars:
+  INVENTORY_GROUP: "{{INVENTORY_GROUP}}"
+  REGISTRY_URL: "{{REGISTRY_URL}}"
+  REGISTRY_USER: "{{REGISTRY_USER}}"
+  REGISTRY_PASSWORD: "{{REGISTRY_PASSWORD}}"
+
+playbook: |
+  ---
+  - name: Set up Docker build pipeline with BuildKit
+    hosts: "{{INVENTORY_GROUP}}"
+    become: true
+
+    tasks:
+      - name: Install Docker Buildx plugin
+        ansible.builtin.apt:
+          name:
+            - docker-buildx-plugin
+            - docker-ce-cli
+          state: present
+          update_cache: true
+
+      - name: Enable BuildKit by default
+        ansible.builtin.copy:
+          dest: /etc/docker/daemon.json
+          content: |
+            {
+              "features": {
+                "buildkit": true
+              },
+              "builder": {
+                "gc": {
+                  "enabled": true,
+                  "defaultKeepStorage": "20GB"
+                }
+              }
+            }
+          mode: "0644"
+        notify: restart-docker
+
+      - name: Create buildx builder instance
+        ansible.builtin.command:
+          cmd: docker buildx create --name pipeline-builder --driver docker-container --use
+        register: buildx_create
+        changed_when: buildx_create.rc == 0
+        failed_when: false
+
+      - name: Log in to container registry
+        ansible.builtin.command:
+          cmd: docker login {{REGISTRY_URL}} -u {{REGISTRY_USER}} --password-stdin
+          stdin: "{{REGISTRY_PASSWORD}}"
+        no_log: true
+
+      - name: Create build and push script
+        ansible.builtin.copy:
+          dest: /usr/local/bin/docker-build-push.sh
+          mode: "0755"
+          content: |
+            #!/usr/bin/env bash
+            set -euo pipefail
+            IMAGE_NAME="${1:?Usage: docker-build-push.sh IMAGE_NAME TAG}"
+            TAG="${2:-latest}"
+            docker buildx build \
+              --builder pipeline-builder \
+              --platform linux/amd64,linux/arm64 \
+              --tag "{{REGISTRY_URL}}/${IMAGE_NAME}:${TAG}" \
+              --push .
+
+    handlers:
+      - name: restart-docker
+        ansible.builtin.systemd:
+          name: docker
+          state: restarted
+          daemon_reload: true

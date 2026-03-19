@@ -1,0 +1,72 @@
+name: Sync to Database
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'patching/**/*.yml'
+      - 'provisioning/**/*.yml'
+      - 'security/**/*.yml'
+      - 'monitoring/**/*.yml'
+      - 'containers/**/*.yml'
+      - 'networking/**/*.yml'
+      - 'backup/**/*.yml'
+      - 'configuration/**/*.yml'
+      - 'ci-cd/**/*.yml'
+
+jobs:
+  sync:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Detect changed and deleted YAML files
+        id: changes
+        run: |
+          DIRS="patching provisioning security monitoring containers networking backup configuration ci-cd"
+          PATTERN=""
+          for dir in $DIRS; do
+            PATTERN="${PATTERN} ${dir}/"
+          done
+
+          CHANGED=$(git diff --name-only --diff-filter=ACMR HEAD~1 HEAD -- $PATTERN | grep '\.yml$' || true)
+          DELETED=$(git diff --name-only --diff-filter=D HEAD~1 HEAD -- $PATTERN | grep '\.yml$' || true)
+
+          echo "changed<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGED" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "deleted<<EOF" >> $GITHUB_OUTPUT
+          echo "$DELETED" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Import changed files
+        if: steps.changes.outputs.changed != ''
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            echo "Importing: $file"
+            npx tsx scripts/import-yaml.ts "$file"
+          done <<< "${{ steps.changes.outputs.changed }}"
+
+      - name: Delete removed files
+        if: steps.changes.outputs.deleted != ''
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            echo "Deleting: $file"
+            npx tsx scripts/delete-from-db.ts "$file"
+          done <<< "${{ steps.changes.outputs.deleted }}"
