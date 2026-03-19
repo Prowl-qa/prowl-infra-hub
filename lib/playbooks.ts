@@ -38,7 +38,31 @@ import {
   readPublishedPlaybookFromFs,
 } from '@/lib/playbooks-fs';
 
-export async function getPublishedPlaybooks(): Promise<PlaybookRecord[]> {
+const CACHE_TTL_MS = 30_000;
+
+interface PlaybooksCache {
+  expiresAt: number;
+  playbooks: PlaybookRecord[];
+  playbookById: Map<string, PlaybookRecord>;
+  pending: Promise<PlaybookRecord[]> | null;
+}
+
+const playbooksCache: PlaybooksCache = {
+  expiresAt: 0,
+  playbooks: [],
+  playbookById: new Map(),
+  pending: null,
+};
+
+function clonePlaybookRecord(p: PlaybookRecord): PlaybookRecord {
+  return { ...p, tags: [...p.tags], complianceTags: [...p.complianceTags] };
+}
+
+function clonePlaybookSummary(p: PlaybookSummary): PlaybookSummary {
+  return { ...p, tags: [...p.tags], complianceTags: [...p.complianceTags] };
+}
+
+async function loadPlaybooks(): Promise<PlaybookRecord[]> {
   try {
     return await dbQueries.getPublishedPlaybooks();
   } catch {
@@ -47,13 +71,53 @@ export async function getPublishedPlaybooks(): Promise<PlaybookRecord[]> {
   }
 }
 
-export async function getPublishedPlaybookSummaries(): Promise<PlaybookSummary[]> {
-  try {
-    return await dbQueries.getPublishedPlaybookSummaries();
-  } catch {
-    console.warn('[playbooks] Database unavailable, falling back to filesystem');
-    return getPublishedPlaybookSummariesFromFs();
+export async function getPublishedPlaybooks(): Promise<PlaybookRecord[]> {
+  const now = Date.now();
+  if (playbooksCache.expiresAt > now) {
+    return playbooksCache.playbooks.map(clonePlaybookRecord);
   }
+
+  if (playbooksCache.pending) {
+    const playbooks = await playbooksCache.pending;
+    return playbooks.map(clonePlaybookRecord);
+  }
+
+  playbooksCache.pending = loadPlaybooks()
+    .then((playbooks) => {
+      playbooksCache.playbooks = playbooks;
+      playbooksCache.playbookById = new Map(playbooks.map((p) => [p.id, p]));
+      playbooksCache.expiresAt = Date.now() + CACHE_TTL_MS;
+      playbooksCache.pending = null;
+      return playbooks;
+    })
+    .catch((error) => {
+      playbooksCache.pending = null;
+      throw error;
+    });
+
+  const playbooks = await playbooksCache.pending;
+  return playbooks.map(clonePlaybookRecord);
+}
+
+export async function getPublishedPlaybookById(id: string): Promise<PlaybookRecord | null> {
+  const now = Date.now();
+  if (playbooksCache.expiresAt > now) {
+    const playbook = playbooksCache.playbookById.get(id);
+    return playbook ? clonePlaybookRecord(playbook) : null;
+  }
+
+  await getPublishedPlaybooks();
+  const playbook = playbooksCache.playbookById.get(id);
+  return playbook ? clonePlaybookRecord(playbook) : null;
+}
+
+export async function getPublishedPlaybookSummaries(): Promise<PlaybookSummary[]> {
+  const playbooks = await getPublishedPlaybooks();
+  return playbooks.map(({ content: _content, ...summary }) => clonePlaybookSummary(summary));
+}
+
+export function getPlaybookDownloadUrl(filePath: string): string {
+  return `/api/playbooks/file?path=${encodeURIComponent(filePath)}`;
 }
 
 export async function readPublishedPlaybook(filePath: string): Promise<string | null> {
