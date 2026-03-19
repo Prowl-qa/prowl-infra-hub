@@ -1,0 +1,85 @@
+# Azure Resource Group
+# Terraform configuration for an Azure resource group with consistent tagging
+# and an RBAC role assignment for a designated principal.
+#
+# Customize:
+#   - Set AZURE_LOCATION to the Azure region (e.g. eastus, westeurope)
+#   - Set RESOURCE_GROUP_NAME to the desired resource group name
+#   - Set ENVIRONMENT to the deployment stage (dev, staging, prod)
+
+name: azure-resource-group
+description: Provision an Azure resource group with tagging and RBAC role assignment
+tags: [provisioning, azure, resource-group, terraform, rbac]
+tool: terraform
+cloud_provider: azure
+os_family: agnostic
+risk_level: low
+compliance_tags: []
+
+vars:
+  AZURE_LOCATION: "{{AZURE_LOCATION}}"
+  RESOURCE_GROUP_NAME: "{{RESOURCE_GROUP_NAME}}"
+  ENVIRONMENT: "{{ENVIRONMENT}}"
+
+playbook: |
+  ---
+  provider "azurerm" {
+    features {}
+  }
+
+  variable "azure_location" {
+    description = "Azure region for the resource group"
+    type        = string
+    default     = "eastus"
+  }
+
+  variable "resource_group_name" {
+    description = "Name of the resource group"
+    type        = string
+  }
+
+  variable "environment" {
+    description = "Deployment environment (dev, staging, prod)"
+    type        = string
+    default     = "dev"
+  }
+
+  variable "rbac_principal_id" {
+    description = "Object ID of the principal to assign the Contributor role"
+    type        = string
+    default     = ""
+  }
+
+  data "azurerm_client_config" "current" {}
+
+  resource "azurerm_resource_group" "main" {
+    name     = var.resource_group_name
+    location = var.azure_location
+
+    tags = {
+      Environment = var.environment
+      ManagedBy   = "terraform"
+      CreatedDate = timestamp()
+    }
+
+    lifecycle {
+      ignore_changes = [tags["CreatedDate"]]
+    }
+  }
+
+  resource "azurerm_role_assignment" "contributor" {
+    count                = var.rbac_principal_id != "" ? 1 : 0
+    scope                = azurerm_resource_group.main.id
+    role_definition_name = "Contributor"
+    principal_id         = var.rbac_principal_id
+  }
+
+  output "resource_group_id" {
+    description = "The ID of the created resource group"
+    value       = azurerm_resource_group.main.id
+  }
+
+  output "resource_group_name" {
+    description = "The name of the created resource group"
+    value       = azurerm_resource_group.main.name
+  }

@@ -1,0 +1,64 @@
+# Rolling OS Update (RHEL)
+# Performs rolling package updates across a RHEL server group using dnf with
+# serial execution to prevent fleet-wide outages. Checks for required reboots
+# and verifies services after each host is updated.
+#
+# Customize:
+#   - Set INVENTORY_GROUP to your Ansible inventory group
+#   - Adjust REBOOT_TIMEOUT for slower hardware
+#   - Set EXCLUDE_PACKAGES to skip specific packages during update
+
+name: rolling-os-update-rhel
+description: Rolling RHEL package updates via dnf with serial execution and reboot handling
+tags: [patching, linux, rhel, dnf, rolling-update]
+tool: ansible
+cloud_provider: agnostic
+os_family: rhel
+risk_level: medium
+compliance_tags: []
+
+vars:
+  INVENTORY_GROUP: "{{INVENTORY_GROUP}}"
+  REBOOT_TIMEOUT: "{{REBOOT_TIMEOUT}}"
+  EXCLUDE_PACKAGES: "{{EXCLUDE_PACKAGES}}"
+
+playbook: |
+  ---
+  - hosts: "{{ inventory_group }}"
+    serial: 1
+    become: true
+    tasks:
+      - name: Check for available updates
+        dnf:
+          list: updates
+        register: available_updates
+
+      - name: Display update count
+        debug:
+          msg: "{{ available_updates.results | length }} updates available"
+
+      - name: Apply all updates via dnf
+        dnf:
+          name: "*"
+          state: latest
+          exclude: "{{ exclude_packages | default('') }}"
+        register: update_result
+
+      - name: Check if reboot is needed
+        command: needs-restarting -r
+        register: reboot_needed
+        failed_when: false
+        changed_when: reboot_needed.rc == 1
+
+      - name: Reboot if required
+        reboot:
+          reboot_timeout: "{{ reboot_timeout | default(300) }}"
+        when: reboot_needed.rc == 1
+
+      - name: Verify system services are running
+        command: systemctl is-system-running
+        register: system_status
+        retries: 3
+        delay: 10
+        until: system_status.rc == 0
+        changed_when: false

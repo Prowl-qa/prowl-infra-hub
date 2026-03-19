@@ -1,0 +1,106 @@
+# Cloudflare DNS
+# Manages a Cloudflare DNS zone and common record types including A,
+# CNAME, and MX records. Supports proxied and unproxied modes for
+# flexible traffic routing.
+#
+# Customize:
+#   - Set CLOUDFLARE_ZONE to the zone name (e.g., example.com)
+#   - Set DOMAIN to the root domain
+#   - Set A_RECORD_IP to the IP address for the root A record
+
+name: cloudflare-dns
+description: Manage Cloudflare DNS zone with A, CNAME, and MX records
+tags: [networking, dns, cloudflare, terraform, cdn]
+tool: terraform
+cloud_provider: agnostic
+os_family: agnostic
+risk_level: low
+compliance_tags: []
+
+vars:
+  CLOUDFLARE_ZONE: "{{CLOUDFLARE_ZONE}}"
+  DOMAIN: "{{DOMAIN}}"
+  A_RECORD_IP: "{{A_RECORD_IP}}"
+
+playbook: |
+  terraform {
+    required_providers {
+      cloudflare = {
+        source  = "cloudflare/cloudflare"
+        version = "~> 4.0"
+      }
+    }
+  }
+
+  provider "cloudflare" {}
+
+  variable "cloudflare_zone" {
+    description = "Cloudflare zone name"
+    type        = string
+  }
+
+  variable "domain" {
+    description = "Root domain for DNS records"
+    type        = string
+  }
+
+  variable "a_record_ip" {
+    description = "IP address for the root A record"
+    type        = string
+  }
+
+  resource "cloudflare_zone" "main" {
+    account_id = var.cloudflare_account_id
+    zone       = var.cloudflare_zone
+  }
+
+  variable "cloudflare_account_id" {
+    description = "Cloudflare account ID"
+    type        = string
+  }
+
+  resource "cloudflare_record" "root_a" {
+    zone_id = cloudflare_zone.main.id
+    name    = "@"
+    content = var.a_record_ip
+    type    = "A"
+    proxied = true
+    ttl     = 1
+  }
+
+  resource "cloudflare_record" "www_cname" {
+    zone_id = cloudflare_zone.main.id
+    name    = "www"
+    content = var.domain
+    type    = "CNAME"
+    proxied = true
+    ttl     = 1
+  }
+
+  resource "cloudflare_record" "mx_primary" {
+    zone_id  = cloudflare_zone.main.id
+    name     = "@"
+    content  = "mail.${var.domain}"
+    type     = "MX"
+    priority = 10
+    ttl      = 3600
+  }
+
+  resource "cloudflare_record" "mx_secondary" {
+    zone_id  = cloudflare_zone.main.id
+    name     = "@"
+    content  = "mail2.${var.domain}"
+    type     = "MX"
+    priority = 20
+    ttl      = 3600
+  }
+
+  output "zone_id" {
+    description = "Cloudflare zone ID"
+    value       = cloudflare_zone.main.id
+  }
+
+  output "name_servers" {
+    description = "Cloudflare nameservers for the zone"
+    value       = cloudflare_zone.main.name_servers
+  }

@@ -165,7 +165,7 @@ jobs:
               playbook = doc.get('playbook')
               if not playbook or not isinstance(playbook, str):
                   errors.append('Missing or empty \"playbook\" field (must contain playbook YAML)')
-              else:
+              elif tool == 'ansible':
                   try:
                       pb = yaml.safe_load(playbook)
                       if isinstance(pb, list):

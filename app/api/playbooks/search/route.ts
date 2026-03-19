@@ -19,6 +19,44 @@ export async function GET(request: Request) {
     .map((t) => t.trim().toLowerCase())
     .filter(Boolean);
 
+  // Try DB-backed search first, fall back to in-memory filtering
+  try {
+    const { searchPlaybooks } = await import('@/lib/db/queries');
+    const { total, results } = await searchPlaybooks({
+      q: q || undefined,
+      category: category || undefined,
+      tool: tool || undefined,
+      cloudProvider: cloudProvider || undefined,
+      riskLevel: riskLevel || undefined,
+      tags: requestedTags.length > 0 ? requestedTags : undefined,
+      limit,
+      offset,
+    });
+
+    return NextResponse.json({
+      query: q || undefined,
+      total,
+      limit,
+      offset,
+      results: results.map((playbook) => ({
+        id: playbook.id,
+        name: playbook.name,
+        description: playbook.description,
+        category: playbook.category,
+        tags: playbook.tags,
+        tool: playbook.tool,
+        cloud_provider: playbook.cloudProvider,
+        os_family: playbook.osFamily,
+        risk_level: playbook.riskLevel,
+        compliance_tags: playbook.complianceTags,
+        taskCount: playbook.taskCount,
+        downloadUrl: `/api/playbooks/file?path=${encodeURIComponent(playbook.filePath)}`,
+      })),
+    });
+  } catch {
+    // DB unavailable — fall back to in-memory filtering
+  }
+
   const allPlaybooks = await getPublishedPlaybookSummaries();
 
   const filtered = allPlaybooks.filter((playbook) => {

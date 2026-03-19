@@ -1,0 +1,72 @@
+# Database Backup to S3
+# Backs up a PostgreSQL database using pg_dump, compresses the output,
+# uploads it to an S3 bucket, and cleans up old local backups.
+#
+# Customize:
+#   - Set INVENTORY_GROUP to target your database servers
+#   - Set DB_NAME and DB_USER for the PostgreSQL database
+#   - Set S3_BUCKET to your backup destination bucket
+#   - Adjust BACKUP_RETENTION_DAYS to control local backup pruning
+
+name: database-backup-s3
+description: Backup PostgreSQL database and upload to AWS S3
+tags: [backup, postgresql, s3, aws, database]
+tool: ansible
+cloud_provider: aws
+os_family: agnostic
+risk_level: medium
+compliance_tags: [SOC2, HIPAA]
+
+vars:
+  INVENTORY_GROUP: "{{INVENTORY_GROUP}}"
+  DB_NAME: "{{DB_NAME}}"
+  DB_USER: "{{DB_USER}}"
+  S3_BUCKET: "{{S3_BUCKET}}"
+  BACKUP_RETENTION_DAYS: "{{BACKUP_RETENTION_DAYS}}"
+
+playbook: |
+  ---
+  - hosts: "{{ inventory_group }}"
+    become: true
+    vars:
+      backup_dir: /var/backups/postgresql
+      timestamp: "{{ ansible_date_time.iso8601_basic_short }}"
+    tasks:
+      - name: Create backup directory
+        file:
+          path: "{{ backup_dir }}"
+          state: directory
+          owner: postgres
+          group: postgres
+          mode: "0750"
+
+      - name: Dump PostgreSQL database
+        command: >
+          pg_dump -U {{ db_user }} -F c -f {{ backup_dir }}/{{ db_name }}_{{ timestamp }}.dump {{ db_name }}
+        become_user: postgres
+
+      - name: Compress database dump
+        archive:
+          path: "{{ backup_dir }}/{{ db_name }}_{{ timestamp }}.dump"
+          dest: "{{ backup_dir }}/{{ db_name }}_{{ timestamp }}.dump.gz"
+          format: gz
+          remove: true
+
+      - name: Upload backup to S3
+        command: >
+          aws s3 cp {{ backup_dir }}/{{ db_name }}_{{ timestamp }}.dump.gz
+          s3://{{ s3_bucket }}/database-backups/{{ db_name }}/{{ db_name }}_{{ timestamp }}.dump.gz
+          --storage-class STANDARD_IA
+
+      - name: Clean up old local backups
+        find:
+          paths: "{{ backup_dir }}"
+          patterns: "{{ db_name }}_*.dump.gz"
+          age: "{{ backup_retention_days | default(7) }}d"
+        register: old_backups
+
+      - name: Remove expired local backup files
+        file:
+          path: "{{ item.path }}"
+          state: absent
+        loop: "{{ old_backups.files }}"

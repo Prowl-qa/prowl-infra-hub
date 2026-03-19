@@ -1,0 +1,131 @@
+# CloudWatch Metric Alarms
+# Terraform configuration to create CloudWatch alarms for EC2 instance monitoring (CPU, memory, disk)
+#
+# Customize:
+#   - AWS_REGION: AWS region where resources are deployed
+#   - INSTANCE_ID: EC2 instance ID to monitor
+#   - SNS_TOPIC_ARN: SNS topic ARN for alarm notifications
+#   - CPU_THRESHOLD: CPU utilization percentage threshold for alarm
+#   - DISK_THRESHOLD: Disk utilization percentage threshold for alarm
+
+name: cloudwatch-alarms
+description: Terraform CloudWatch alarms for CPU, memory, and disk monitoring on EC2 instances
+tags: [monitoring, cloudwatch, aws, terraform, alarms, ec2, observability]
+tool: terraform
+cloud_provider: aws
+os_family: agnostic
+risk_level: low
+compliance_tags: []
+
+vars:
+  AWS_REGION: "{{AWS_REGION}}"
+  INSTANCE_ID: "{{INSTANCE_ID}}"
+  SNS_TOPIC_ARN: "{{SNS_TOPIC_ARN}}"
+  CPU_THRESHOLD: "{{CPU_THRESHOLD}}"
+  DISK_THRESHOLD: "{{DISK_THRESHOLD}}"
+
+playbook: |
+  provider "aws" {
+    region = "{{AWS_REGION}}"
+  }
+
+  variable "instance_id" {
+    description = "EC2 instance ID to monitor"
+    type        = string
+    default     = "{{INSTANCE_ID}}"
+  }
+
+  variable "sns_topic_arn" {
+    description = "SNS topic ARN for alarm notifications"
+    type        = string
+    default     = "{{SNS_TOPIC_ARN}}"
+  }
+
+  variable "cpu_threshold" {
+    description = "CPU utilization threshold percentage"
+    type        = number
+    default     = {{CPU_THRESHOLD}}
+  }
+
+  variable "disk_threshold" {
+    description = "Disk utilization threshold percentage"
+    type        = number
+    default     = {{DISK_THRESHOLD}}
+  }
+
+  resource "aws_cloudwatch_metric_alarm" "cpu_utilization_high" {
+    alarm_name          = "cpu-utilization-high-${var.instance_id}"
+    alarm_description   = "CPU utilization exceeds ${var.cpu_threshold}% for 5 minutes"
+    comparison_operator = "GreaterThanOrEqualToThreshold"
+    evaluation_periods  = 2
+    metric_name         = "CPUUtilization"
+    namespace           = "AWS/EC2"
+    period              = 300
+    statistic           = "Average"
+    threshold           = var.cpu_threshold
+    treat_missing_data  = "missing"
+
+    dimensions = {
+      InstanceId = var.instance_id
+    }
+
+    alarm_actions = [var.sns_topic_arn]
+    ok_actions    = [var.sns_topic_arn]
+
+    tags = {
+      Name      = "cpu-utilization-high"
+      ManagedBy = "terraform"
+    }
+  }
+
+  resource "aws_cloudwatch_metric_alarm" "memory_utilization_high" {
+    alarm_name          = "memory-utilization-high-${var.instance_id}"
+    alarm_description   = "Memory utilization exceeds 80% for 5 minutes"
+    comparison_operator = "GreaterThanOrEqualToThreshold"
+    evaluation_periods  = 2
+    metric_name         = "mem_used_percent"
+    namespace           = "CWAgent"
+    period              = 300
+    statistic           = "Average"
+    threshold           = 80
+    treat_missing_data  = "missing"
+
+    dimensions = {
+      InstanceId = var.instance_id
+    }
+
+    alarm_actions = [var.sns_topic_arn]
+    ok_actions    = [var.sns_topic_arn]
+
+    tags = {
+      Name      = "memory-utilization-high"
+      ManagedBy = "terraform"
+    }
+  }
+
+  resource "aws_cloudwatch_metric_alarm" "disk_utilization_high" {
+    alarm_name          = "disk-utilization-high-${var.instance_id}"
+    alarm_description   = "Disk utilization exceeds ${var.disk_threshold}% for 5 minutes"
+    comparison_operator = "GreaterThanOrEqualToThreshold"
+    evaluation_periods  = 2
+    metric_name         = "disk_used_percent"
+    namespace           = "CWAgent"
+    period              = 300
+    statistic           = "Average"
+    threshold           = var.disk_threshold
+    treat_missing_data  = "missing"
+
+    dimensions = {
+      InstanceId = var.instance_id
+      path       = "/"
+      fstype     = "ext4"
+    }
+
+    alarm_actions = [var.sns_topic_arn]
+    ok_actions    = [var.sns_topic_arn]
+
+    tags = {
+      Name      = "disk-utilization-high"
+      ManagedBy = "terraform"
+    }
+  }

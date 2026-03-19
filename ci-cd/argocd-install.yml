@@ -1,0 +1,59 @@
+# ArgoCD Installation
+# Kubernetes manifests to install ArgoCD in a dedicated namespace with ingress
+#
+# Customize:
+#   - ARGOCD_NAMESPACE: Kubernetes namespace for the ArgoCD deployment
+#   - ARGOCD_DOMAIN: Domain name for the ArgoCD web UI ingress
+
+name: argocd-install
+description: Kubernetes manifests to install ArgoCD in a dedicated namespace
+tags: [ci-cd, argocd, kubernetes, gitops]
+tool: k8s
+cloud_provider: agnostic
+os_family: agnostic
+risk_level: medium
+compliance_tags: []
+
+vars:
+  ARGOCD_NAMESPACE: "{{ARGOCD_NAMESPACE}}"
+  ARGOCD_DOMAIN: "{{ARGOCD_DOMAIN}}"
+
+playbook: |
+  ---
+  apiVersion: v1
+  kind: Namespace
+  metadata:
+    name: "{{ARGOCD_NAMESPACE}}"
+    labels:
+      app.kubernetes.io/part-of: argocd
+  ---
+  # Install ArgoCD using the official stable manifests.
+  # Apply the upstream manifest into the target namespace:
+  #   kubectl apply -n {{ARGOCD_NAMESPACE}} \
+  #     -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+  ---
+  apiVersion: networking.k8s.io/v1
+  kind: Ingress
+  metadata:
+    name: argocd-server-ingress
+    namespace: "{{ARGOCD_NAMESPACE}}"
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+  spec:
+    ingressClassName: nginx
+    rules:
+      - host: "{{ARGOCD_DOMAIN}}"
+        http:
+          paths:
+            - path: /
+              pathType: Prefix
+              backend:
+                service:
+                  name: argocd-server
+                  port:
+                    number: 443
+    tls:
+      - hosts:
+          - "{{ARGOCD_DOMAIN}}"
+        secretName: argocd-tls

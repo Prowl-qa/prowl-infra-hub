@@ -1,0 +1,73 @@
+# Basic Server Setup (RHEL)
+# Performs initial server provisioning on RHEL-based systems: creates a deploy
+# user, sets the timezone, installs essential packages via dnf, and configures
+# SSH key access.
+#
+# Customize:
+#   - Set INVENTORY_GROUP to target hosts
+#   - Set DEPLOY_USER to your preferred service account name
+#   - Set TIMEZONE to your server's timezone
+#   - Set SSH_PUBLIC_KEY to the authorized public key
+
+name: basic-server-setup-rhel
+description: Initial RHEL server setup with deploy user, timezone, packages, and SSH keys
+tags: [provisioning, linux, rhel, setup, users, ssh, dnf]
+tool: ansible
+cloud_provider: agnostic
+os_family: rhel
+risk_level: low
+compliance_tags: []
+
+vars:
+  INVENTORY_GROUP: "{{INVENTORY_GROUP}}"
+  DEPLOY_USER: "{{DEPLOY_USER}}"
+  TIMEZONE: "{{TIMEZONE}}"
+  SSH_PUBLIC_KEY: "{{SSH_PUBLIC_KEY}}"
+
+playbook: |
+  ---
+  - hosts: "{{ inventory_group }}"
+    become: true
+    tasks:
+      - name: Update dnf package cache
+        dnf:
+          update_cache: yes
+
+      - name: Install essential packages
+        dnf:
+          name:
+            - curl
+            - wget
+            - git
+            - htop
+            - unzip
+            - vim
+            - net-tools
+          state: present
+
+      - name: Set timezone
+        timezone:
+          name: "{{ timezone | default('UTC') }}"
+
+      - name: Create deploy user
+        user:
+          name: "{{ deploy_user | default('deploy') }}"
+          shell: /bin/bash
+          groups: wheel
+          append: yes
+          create_home: yes
+
+      - name: Add SSH key for deploy user
+        authorized_key:
+          user: "{{ deploy_user | default('deploy') }}"
+          key: "{{ ssh_public_key }}"
+          state: present
+        when: ssh_public_key is defined
+
+      - name: Allow deploy user passwordless sudo
+        lineinfile:
+          path: /etc/sudoers.d/deploy
+          line: "{{ deploy_user | default('deploy') }} ALL=(ALL) NOPASSWD:ALL"
+          create: yes
+          mode: "0440"
+          validate: "visudo -cf %s"

@@ -1,0 +1,119 @@
+# Kubernetes Namespace Setup
+# Create a Kubernetes namespace with resource quotas, limit ranges, and network policies for workload isolation
+#
+# Customize:
+#   - NAMESPACE: Name of the Kubernetes namespace to create
+#   - CPU_LIMIT: Maximum total CPU cores allowed in the namespace
+#   - MEMORY_LIMIT: Maximum total memory allowed in the namespace
+#   - STORAGE_LIMIT: Maximum total storage allowed in the namespace
+
+name: k8s-namespace-setup
+description: Kubernetes namespace with resource quotas, limit ranges, and network policies
+tags: [kubernetes, namespace, resource-quotas, network-policy, security, containers]
+tool: k8s
+cloud_provider: agnostic
+os_family: agnostic
+risk_level: low
+compliance_tags: []
+
+vars:
+  NAMESPACE: "{{NAMESPACE}}"
+  CPU_LIMIT: "{{CPU_LIMIT}}"
+  MEMORY_LIMIT: "{{MEMORY_LIMIT}}"
+  STORAGE_LIMIT: "{{STORAGE_LIMIT}}"
+
+playbook: |
+  ---
+  apiVersion: v1
+  kind: Namespace
+  metadata:
+    name: "{{NAMESPACE}}"
+    labels:
+      app.kubernetes.io/managed-by: prowl-infra
+      environment: production
+  ---
+  apiVersion: v1
+  kind: ResourceQuota
+  metadata:
+    name: "{{NAMESPACE}}-quota"
+    namespace: "{{NAMESPACE}}"
+  spec:
+    hard:
+      requests.cpu: "{{CPU_LIMIT}}"
+      requests.memory: "{{MEMORY_LIMIT}}"
+      limits.cpu: "{{CPU_LIMIT}}"
+      limits.memory: "{{MEMORY_LIMIT}}"
+      requests.storage: "{{STORAGE_LIMIT}}"
+      pods: "50"
+      services: "20"
+      configmaps: "50"
+      secrets: "50"
+      persistentvolumeclaims: "20"
+  ---
+  apiVersion: v1
+  kind: LimitRange
+  metadata:
+    name: "{{NAMESPACE}}-limits"
+    namespace: "{{NAMESPACE}}"
+  spec:
+    limits:
+      - type: Container
+        default:
+          cpu: 500m
+          memory: 512Mi
+        defaultRequest:
+          cpu: 100m
+          memory: 128Mi
+        max:
+          cpu: "2"
+          memory: 2Gi
+        min:
+          cpu: 50m
+          memory: 64Mi
+      - type: Pod
+        max:
+          cpu: "4"
+          memory: 4Gi
+  ---
+  apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: "{{NAMESPACE}}-default-deny-ingress"
+    namespace: "{{NAMESPACE}}"
+  spec:
+    podSelector: {}
+    policyTypes:
+      - Ingress
+  ---
+  apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: "{{NAMESPACE}}-allow-same-namespace"
+    namespace: "{{NAMESPACE}}"
+  spec:
+    podSelector: {}
+    policyTypes:
+      - Ingress
+    ingress:
+      - from:
+          - podSelector: {}
+  ---
+  apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: "{{NAMESPACE}}-default-deny-egress"
+    namespace: "{{NAMESPACE}}"
+  spec:
+    podSelector: {}
+    policyTypes:
+      - Egress
+    egress:
+      - to:
+          - namespaceSelector: {}
+        ports:
+          - protocol: TCP
+            port: 53
+          - protocol: UDP
+            port: 53
+      - to:
+          - podSelector: {}
