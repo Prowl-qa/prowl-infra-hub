@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { getPublishedPlaybookSummaries } from '@/lib/playbooks';
+import { getPlaybookDownloadUrl, getPublishedPlaybookSummaries } from '@/lib/playbooks';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -39,18 +39,8 @@ export async function GET(request: Request) {
       limit,
       offset,
       results: results.map((playbook) => ({
-        id: playbook.id,
-        name: playbook.name,
-        description: playbook.description,
-        category: playbook.category,
-        tags: playbook.tags,
-        tool: playbook.tool,
-        cloud_provider: playbook.cloudProvider,
-        os_family: playbook.osFamily,
-        risk_level: playbook.riskLevel,
-        compliance_tags: playbook.complianceTags,
-        taskCount: playbook.taskCount,
-        downloadUrl: `/api/playbooks/file?path=${encodeURIComponent(playbook.filePath)}`,
+        ...playbook,
+        downloadUrl: getPlaybookDownloadUrl(playbook.filePath),
       })),
     });
   } catch {
@@ -79,18 +69,8 @@ export async function GET(request: Request) {
   });
 
   const results = filtered.slice(offset, offset + limit).map((playbook) => ({
-    id: playbook.id,
-    name: playbook.name,
-    description: playbook.description,
-    category: playbook.category,
-    tags: playbook.tags,
-    tool: playbook.tool,
-    cloud_provider: playbook.cloudProvider,
-    os_family: playbook.osFamily,
-    risk_level: playbook.riskLevel,
-    compliance_tags: playbook.complianceTags,
-    taskCount: playbook.taskCount,
-    downloadUrl: `/api/playbooks/file?path=${encodeURIComponent(playbook.filePath)}`,
+    ...playbook,
+    downloadUrl: getPlaybookDownloadUrl(playbook.filePath),
   }));
 
   return NextResponse.json({
