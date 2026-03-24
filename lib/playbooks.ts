@@ -25,6 +25,8 @@ export interface PlaybookSummary {
   updatedAt: string;
   isVerified: boolean;
   isNew: boolean;
+  tested: boolean;
+  testedOn: Array<{ os: string; arch: string }>;
 }
 
 export interface PlaybookRecord extends PlaybookSummary {
@@ -55,11 +57,11 @@ const playbooksCache: PlaybooksCache = {
 };
 
 function clonePlaybookRecord(p: PlaybookRecord): PlaybookRecord {
-  return { ...p, tags: [...p.tags], complianceTags: [...p.complianceTags] };
+  return { ...p, tags: [...p.tags], complianceTags: [...p.complianceTags], testedOn: [...p.testedOn] };
 }
 
 function clonePlaybookSummary(p: PlaybookSummary): PlaybookSummary {
-  return { ...p, tags: [...p.tags], complianceTags: [...p.complianceTags] };
+  return { ...p, tags: [...p.tags], complianceTags: [...p.complianceTags], testedOn: [...p.testedOn] };
 }
 
 async function loadPlaybooks(): Promise<PlaybookRecord[]> {

@@ -95,6 +95,9 @@ async function main() {
             taskCount: parsed.taskCount,
             isVerified: true,
             isFeatured: FEATURED_PLAYBOOKS.includes(filePath),
+            tested: false,
+            testedOn: [],
+            testResults: [],
           })
           .onConflictDoUpdate({
             target: schema.playbooks.slug,

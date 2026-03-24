@@ -36,6 +36,8 @@ function toSummary(row: Playbook): PlaybookSummary {
     updatedAt: row.updatedAt.toISOString(),
     isVerified: row.isVerified,
     isNew: Date.now() - row.updatedAt.getTime() <= 30 * 24 * 60 * 60 * 1000,
+    tested: row.tested,
+    testedOn: row.testedOn,
   };
 }
 
