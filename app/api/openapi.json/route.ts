@@ -158,6 +158,18 @@ const spec = {
           risk_level: { type: 'string' },
           compliance_tags: { type: 'array', items: { type: 'string' } },
           taskCount: { type: 'integer' },
+          tested: { type: 'boolean', description: 'Whether this playbook has been execution-tested' },
+          testedOn: {
+            type: 'array',
+            description: 'Platforms the playbook has been tested on',
+            items: {
+              type: 'object',
+              properties: {
+                os: { type: 'string', example: 'ubuntu-22.04' },
+                arch: { type: 'string', example: 'x86_64' },
+              },
+            },
+          },
           downloadUrl: { type: 'string' },
         },
       },
