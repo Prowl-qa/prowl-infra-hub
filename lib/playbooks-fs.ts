@@ -146,6 +146,8 @@ export async function getPublishedPlaybooksFromFs(): Promise<PlaybookRecord[]> {
           updatedAt: stats.mtime.toISOString(),
           isVerified: true,
           isNew: Date.now() - stats.mtimeMs <= newThresholdMs,
+          tested: false,
+          testedOn: [],
           content,
         });
       } catch (error) {

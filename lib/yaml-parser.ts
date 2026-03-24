@@ -142,10 +142,31 @@ export interface ParsedPlaybook {
   vars: Record<string, string>;
   playbook: string;
   taskCount: number;
+  tested: boolean;
+  testedOn: Array<{ os: string; arch: string }>;
+}
+
+export function parseTestedOn(content: string): Array<{ os: string; arch: string }> {
+  const lines = extractSection(content, 'tested_on');
+  const results: Array<{ os: string; arch: string }> = [];
+  let current: Partial<{ os: string; arch: string }> = {};
+  for (const line of lines) {
+    const osMatch = line.match(/^\s+-?\s*os:\s*"?(.+?)"?\s*$/);
+    const archMatch = line.match(/^\s+arch:\s*"?(.+?)"?\s*$/);
+    if (osMatch) {
+      if (current.os) results.push({ os: current.os, arch: current.arch || 'x86_64' });
+      current = { os: osMatch[1] };
+    } else if (archMatch) {
+      current.arch = archMatch[1];
+    }
+  }
+  if (current.os) results.push({ os: current.os, arch: current.arch || 'x86_64' });
+  return results;
 }
 
 export function parsePlaybookYaml(content: string, filename: string): ParsedPlaybook {
   const name = getFieldValue(content, 'name');
+  const testedValue = getFieldValue(content, 'tested');
   return {
     name,
     title: toDisplayTitle(name, filename),
@@ -159,5 +180,7 @@ export function parsePlaybookYaml(content: string, filename: string): ParsedPlay
     vars: getVarsSection(content),
     playbook: getPlaybookBlock(content),
     taskCount: countPlaybookTasks(content),
+    tested: testedValue === 'true',
+    testedOn: parseTestedOn(content),
   };
 }
