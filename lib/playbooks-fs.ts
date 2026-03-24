@@ -68,9 +68,22 @@ function getTagValues(content: string): string[] {
     .filter((tag) => Boolean(tag) && !tag.startsWith('#'));
 }
 
+const UPPERCASE_WORDS = new Set([
+  'aws', 'gcp', 'ssh', 'os', 'ssl', 'tls', 'dns', 'http', 'https', 'api',
+  'cpu', 'ram', 'vm', 'vpc', 'iam', 'rds', 'ec2', 's3', 'ebs', 'elb', 'alb',
+  'nlb', 'ecs', 'eks', 'ecr', 'gke', 'aks', 'ci', 'cd', 'ip', 'tcp', 'udp', 'nfs',
+  'lvm', 'raid', 'sql', 'db', 'vpn', 'mfa', 'rbac', 'acl', 'cis', 'pci',
+  'soc', 'hipaa', 'ntp', 'smtp', 'ldap', 'sso', 'jwt', 'k8s',
+]);
+
 function toDisplayTitle(name: string, fallbackFilename: string) {
   const raw = name || fallbackFilename.replace(/\.yml$/, '');
-  return raw.replace(/[-_]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+  return raw
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+    .split(' ')
+    .map((word) => (UPPERCASE_WORDS.has(word.toLowerCase()) ? word.toUpperCase() : word))
+    .join(' ');
 }
 
 type RiskLevel = 'low' | 'medium' | 'high';
