@@ -27,10 +27,6 @@ const monoFont = JetBrains_Mono({
 export const metadata: Metadata = {
   title: 'Prowl Infra Hub | Community Playbook Library',
   description: 'Browse verified community infrastructure automation playbooks and submit new templates via pull request.',
-  icons: {
-    icon: '/assets/brand/mascot.png',
-    apple: '/assets/brand/mascot.png',
-  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
