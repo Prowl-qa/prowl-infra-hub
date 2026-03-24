@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "db:seed": "npx tsx scripts/seed.ts"
+    "db:seed": "npx tsx scripts/seed.ts",
+    "test:playbook": "npx tsx cli/index.ts test",
+    "test:playbook:all": "npx tsx cli/index.ts test --all"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.1",
