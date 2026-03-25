@@ -42,7 +42,7 @@ jobs:
       - name: Detect changed playbooks
         id: changed
         run: |
-          FILES=$(gh pr diff ${{ github.event.pull_request.number }} --name-only | grep -E '^\(patching|provisioning|security|monitoring|containers|networking|backup|configuration|ci-cd\)/.+\.yml$' || true)
+          FILES=$(gh pr diff ${{ github.event.pull_request.number }} --name-only | grep -E '^(patching|provisioning|security|monitoring|containers|networking|backup|configuration|ci-cd)/.+\.yml$' || true)
           echo "files<<EOF" >> "$GITHUB_OUTPUT"
           echo "$FILES" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
@@ -56,6 +56,8 @@ jobs:
 
       - name: Run playbook tests
         if: steps.changed.outputs.count != '0'
+        env:
+          CHANGED_FILES: ${{ steps.changed.outputs.files }}
         run: |
           EXIT_CODE=0
           while IFS= read -r file; do
@@ -63,7 +65,7 @@ jobs:
             echo "::group::Testing $file"
             npx tsx cli/index.ts test "$file" --os ubuntu-22.04 || EXIT_CODE=1
             echo "::endgroup::"
-          done <<< "${{ steps.changed.outputs.files }}"
+          done <<< "$CHANGED_FILES"
           exit $EXIT_CODE
 
       - name: Upload test reports

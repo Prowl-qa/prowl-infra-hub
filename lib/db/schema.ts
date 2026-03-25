@@ -1,4 +1,5 @@
 import {
+  customType,
   pgTable,
   serial,
   varchar,
@@ -11,6 +12,14 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+
+const tsvector = customType<{ data: string }>({
+  dataType() {
+    return 'tsvector';
+  },
+});
+
+const playbooksSearchVectorSql = sql`to_tsvector('english', coalesce(title, '') || ' ' || coalesce(description, '') || ' ' || coalesce(name, ''))`;
 
 export const playbooks = pgTable(
   'playbooks',
@@ -39,7 +48,7 @@ export const playbooks = pgTable(
     testResults: jsonb('test_results').notNull().$type<Array<{ os: string; passed: boolean; date: string }>>().default([]),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-    searchVector: text('search_vector'),
+    searchVector: tsvector('search_vector').generatedAlwaysAs(playbooksSearchVectorSql),
   },
   (table) => [
     index('idx_playbooks_category').on(table.category),
@@ -47,6 +56,7 @@ export const playbooks = pgTable(
     index('idx_playbooks_cloud_provider').on(table.cloudProvider),
     index('idx_playbooks_risk_level').on(table.riskLevel),
     index('idx_playbooks_is_featured').on(table.isFeatured).where(sql`is_featured = true`),
+    index('idx_playbooks_search').using('gin', table.searchVector),
   ]
 );
 

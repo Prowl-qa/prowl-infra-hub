@@ -16,7 +16,7 @@ jobs:
             ! -name '*.yml' ! -name '*.md' ! -name '*.html' ! -name '*.css' ! -name '*.js' \
             ! -name '*.mjs' ! -name '*.ts' ! -name '*.tsx' ! -name '*.d.ts' ! -name '*.json' ! -name '*.sql' \
             ! -name '*.svg' ! -name '*.png' ! -name '*.jpg' ! -name '*.jpeg' ! -name '*.webp' \
-            ! -name '*.txt' ! -name 'LICENSE' ! -name '.gitignore' \
+            ! -name '*.txt' ! -name 'LICENSE' ! -name '.gitignore' ! -name '.env.example' \
             | head -20)
           if [ -n "$INVALID_FILES" ]; then
             echo "::error::Unexpected file types detected in submission:"
