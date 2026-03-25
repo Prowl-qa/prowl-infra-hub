@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+import { getClientIpFromRequest } from '@/lib/request-ip';
 import { checkRateLimit } from '@/lib/rate-limit';
 
 const RATE_LIMIT_RULES: Array<{
@@ -22,18 +23,9 @@ function applyRateLimitHeaders(response: NextResponse, result: Awaited<ReturnTyp
 }
 
 function getClientIp(request: NextRequest): string | null {
-  const trustedRequest = request as NextRequest & { ip?: string | null };
-  if (trustedRequest.ip) {
-    return trustedRequest.ip;
-  }
-
-  const realIp = request.headers.get('x-real-ip')?.trim();
-  if (realIp) {
-    return realIp;
-  }
-
-  if (request.nextUrl.hostname === 'localhost' || request.nextUrl.hostname === '127.0.0.1') {
-    return '127.0.0.1';
+  const ip = getClientIpFromRequest(request as NextRequest & { ip?: string | null });
+  if (ip) {
+    return ip;
   }
 
   console.warn('[rate-limit] Missing trusted client IP', {

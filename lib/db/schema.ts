@@ -9,7 +9,6 @@ import {
   boolean,
   timestamp,
   index,
-  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -56,6 +55,8 @@ export const playbooks = pgTable(
     index('idx_playbooks_cloud_provider').on(table.cloudProvider),
     index('idx_playbooks_risk_level').on(table.riskLevel),
     index('idx_playbooks_is_featured').on(table.isFeatured).where(sql`is_featured = true`),
+    index('idx_playbooks_tags').using('gin', table.tags),
+    index('idx_playbooks_compliance_tags').using('gin', table.complianceTags),
     index('idx_playbooks_search').using('gin', table.searchVector),
   ]
 );
