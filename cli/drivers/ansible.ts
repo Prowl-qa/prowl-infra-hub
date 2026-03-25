@@ -59,7 +59,58 @@ function getConvergePlaybook(playbookPath: string): string {
   tasks:
     - name: Include playbook under test
       ansible.builtin.include_tasks: ${playbookPath}
-`;
+  `;
+}
+
+function getIndentWidth(line: string): number {
+  const match = line.match(/^\s*/);
+  return match ? match[0].length : 0;
+}
+
+function dedentYamlBlock(lines: string[]): string {
+  const nonEmptyLines = lines.filter((line) => line.trim() !== '');
+  if (nonEmptyLines.length === 0) {
+    return '';
+  }
+
+  const minIndent = Math.min(...nonEmptyLines.map(getIndentWidth));
+  return lines.map((line) => (line.trim() === '' ? '' : line.slice(minIndent))).join('\n');
+}
+
+export function extractAnsibleTasksForInclude(tasksContent: string): string {
+  const lines = tasksContent.split('\n');
+  let tasksIndent: number | null = null;
+  const taskLines: string[] = [];
+
+  for (const line of lines) {
+    if (tasksIndent === null) {
+      const match = line.match(/^(\s*)tasks:\s*$/);
+      if (match) {
+        tasksIndent = match[1].length;
+      }
+      continue;
+    }
+
+    const trimmed = line.trim();
+    if (trimmed === '') {
+      taskLines.push(line);
+      continue;
+    }
+
+    const indentWidth = getIndentWidth(line);
+    if (indentWidth <= tasksIndent && !trimmed.startsWith('#')) {
+      break;
+    }
+
+    taskLines.push(line);
+  }
+
+  const dedented = dedentYamlBlock(taskLines).trim();
+  if (dedented) {
+    return `${dedented}\n`;
+  }
+
+  throw new Error('No tasks found in playbook block');
 }
 
 export async function runAnsibleTest(options: AnsibleTestOptions): Promise<AnsibleTestResult> {
@@ -95,20 +146,9 @@ export async function runAnsibleTest(options: AnsibleTestOptions): Promise<Ansib
       };
     }
 
-    // Write extracted playbook tasks to a temp file
     const tasksContent = playbookMatch[1];
     const tasksFile = path.join(tmpDir, 'tasks.yml');
-
-    // Extract just the tasks from the playbook YAML (strip the play-level keys)
-    const taskLines: string[] = [];
-    let inTasks = false;
-    for (const line of tasksContent.split('\n')) {
-      if (/^\s{2}- name:/.test(line) || inTasks) {
-        inTasks = true;
-        taskLines.push(line);
-      }
-    }
-    await fs.writeFile(tasksFile, taskLines.join('\n'));
+    await fs.writeFile(tasksFile, extractAnsibleTasksForInclude(tasksContent));
 
     // Write converge playbook
     const convergeFile = path.join(tmpDir, 'converge.yml');

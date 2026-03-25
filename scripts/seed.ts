@@ -97,8 +97,9 @@ async function main() {
             testResults: [],
           })
           .onConflictDoUpdate({
-            target: schema.playbooks.slug,
+            target: schema.playbooks.filePath,
             set: {
+              slug,
               name: parsed.name,
               title: parsed.title,
               description: parsed.description,
