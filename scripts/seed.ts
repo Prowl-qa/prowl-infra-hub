@@ -41,13 +41,10 @@ async function main() {
   const pool = new pg.Pool({ connectionString: databaseUrl });
   const db = drizzle(pool, { schema });
 
-  // Create GIN indexes and search vector trigger via raw SQL
+  // Create JSONB GIN indexes that are still managed via raw SQL.
   await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_playbooks_tags ON playbooks USING GIN (tags);
     CREATE INDEX IF NOT EXISTS idx_playbooks_compliance_tags ON playbooks USING GIN (compliance_tags);
-    CREATE INDEX IF NOT EXISTS idx_playbooks_search ON playbooks USING GIN (
-      to_tsvector('english', coalesce(title, '') || ' ' || coalesce(description, '') || ' ' || coalesce(name, ''))
-    );
   `);
 
   const rootDir = process.cwd();

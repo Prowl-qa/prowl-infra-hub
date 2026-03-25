@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-import type { PlaybookCategory, PlaybookSummary, PlaybookRecord } from '@/lib/playbooks';
+import type { PlaybookCategory, PlaybookSummary, PlaybookRecord } from './playbooks.ts';
 
 const PUBLISHED_DIRS = ['patching', 'provisioning', 'security', 'monitoring', 'containers', 'networking', 'backup', 'configuration', 'ci-cd'] as const;
 

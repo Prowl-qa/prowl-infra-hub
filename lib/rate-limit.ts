@@ -11,7 +11,7 @@ export interface RateLimitResult {
   resetAt: number;
 }
 
-interface RateLimitStore {
+export interface RateLimitStore {
   check(key: string, maxRequests: number, windowMs: number): Promise<RateLimitResult>;
 }
 
@@ -77,10 +77,13 @@ class MemoryRateLimitStore implements RateLimitStore {
 }
 
 class UpstashRateLimitStore implements RateLimitStore {
-  constructor(
-    private readonly baseUrl: string,
-    private readonly token: string
-  ) {}
+  private readonly baseUrl: string;
+  private readonly token: string;
+
+  constructor(baseUrl: string, token: string) {
+    this.baseUrl = baseUrl;
+    this.token = token;
+  }
 
   private async command<T>(
     validate: (result: unknown) => result is T,
@@ -176,35 +179,77 @@ function isRateLimitScriptResult(value: unknown): value is [number, number] {
 const memoryStore = new MemoryRateLimitStore();
 const upstashUrl = process.env.UPSTASH_REDIS_REST_URL;
 const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+const sharedStoreRetryCooldownMs = 60_000;
 
-let activeStore: RateLimitStore =
+const sharedStore: RateLimitStore | null =
   upstashUrl && upstashToken
     ? new UpstashRateLimitStore(upstashUrl.replace(/\/$/, ''), upstashToken)
-    : memoryStore;
+    : null;
 
-let warnedAboutMemoryStore = false;
+interface CreateRateLimitCheckerOptions {
+  memoryStore?: RateLimitStore;
+  sharedStore?: RateLimitStore | null;
+  retryCooldownMs?: number;
+  now?: () => number;
+  warn?: (message?: unknown, ...optionalParams: unknown[]) => void;
+}
 
-export async function checkRateLimit(
-  key: string,
-  maxRequests: number,
-  windowMs: number
-): Promise<RateLimitResult> {
-  if (activeStore === memoryStore && !warnedAboutMemoryStore) {
-    warnedAboutMemoryStore = true;
-    console.warn(
-      '[rate-limit] Using in-memory store; limits are best-effort per runtime instance. Configure UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN for shared enforcement.'
-    );
-  }
+export function createRateLimitChecker(options: CreateRateLimitCheckerOptions = {}) {
+  const fallbackStore = options.memoryStore ?? memoryStore;
+  const remoteStore = options.sharedStore ?? sharedStore;
+  const retryCooldownMs = options.retryCooldownMs ?? sharedStoreRetryCooldownMs;
+  const now = options.now ?? (() => Date.now());
+  const warn = options.warn ?? ((message?: unknown, ...optionalParams: unknown[]) => {
+    console.warn(message, ...optionalParams);
+  });
 
-  try {
-    return await activeStore.check(key, maxRequests, windowMs);
-  } catch (error) {
-    if (activeStore !== memoryStore) {
-      console.warn('[rate-limit] Shared store unavailable, falling back to in-memory limits', error);
-      activeStore = memoryStore;
-      return memoryStore.check(key, maxRequests, windowMs);
+  let activeStore: RateLimitStore = remoteStore ?? fallbackStore;
+  let retrySharedStoreAfter = 0;
+  let warnedAboutMemoryOnlyMode = false;
+  let warnedAboutFallback = false;
+
+  return async function checkRateLimit(
+    key: string,
+    maxRequests: number,
+    windowMs: number
+  ): Promise<RateLimitResult> {
+    const currentTime = now();
+
+    if (!remoteStore) {
+      if (!warnedAboutMemoryOnlyMode) {
+        warnedAboutMemoryOnlyMode = true;
+        warn(
+          '[rate-limit] Using in-memory store; limits are best-effort per runtime instance. Configure UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN for shared enforcement.'
+        );
+      }
+
+      return fallbackStore.check(key, maxRequests, windowMs);
     }
 
-    throw error;
-  }
+    if (activeStore === fallbackStore && currentTime >= retrySharedStoreAfter) {
+      activeStore = remoteStore;
+    }
+
+    try {
+      const result = await activeStore.check(key, maxRequests, windowMs);
+      if (activeStore === remoteStore && warnedAboutFallback) {
+        warnedAboutFallback = false;
+        warn('[rate-limit] Shared store recovered; resuming shared enforcement.');
+      }
+
+      return result;
+    } catch (error) {
+      if (activeStore !== fallbackStore) {
+        retrySharedStoreAfter = currentTime + retryCooldownMs;
+        activeStore = fallbackStore;
+        warnedAboutFallback = true;
+        warn('[rate-limit] Shared store unavailable, falling back to in-memory limits', error);
+        return fallbackStore.check(key, maxRequests, windowMs);
+      }
+
+      throw error;
+    }
+  };
 }
+
+export const checkRateLimit = createRateLimitChecker();

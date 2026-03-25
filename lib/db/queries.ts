@@ -1,9 +1,9 @@
 import { eq, and, sql, ilike, type SQL } from 'drizzle-orm';
 
-import type { PlaybookCategory, PlaybookSummary, PlaybookRecord } from '@/lib/playbooks';
+import type { PlaybookCategory, PlaybookSummary, PlaybookRecord } from '../playbooks.ts';
 
-import { db } from './index';
-import { playbooks, type Playbook } from './schema';
+import { db } from './index.ts';
+import { playbooks, type Playbook } from './schema.ts';
 
 const CATEGORY_LABELS: Record<string, string> = {
   patching: 'Patching',
@@ -131,7 +131,7 @@ export async function searchPlaybooks(opts: SearchOptions) {
   }
   if (opts.q) {
     conditions.push(
-      sql`to_tsvector('english', ${playbooks.title} || ' ' || ${playbooks.description} || ' ' || ${playbooks.name}) @@ plainto_tsquery('english', ${opts.q})`
+      sql`${playbooks.searchVector} @@ plainto_tsquery('english', ${opts.q})`
     );
   }
 

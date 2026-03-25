@@ -33,12 +33,12 @@ export interface PlaybookRecord extends PlaybookSummary {
   content: string;
 }
 
-import * as dbQueries from '@/lib/db/queries';
+import * as dbQueries from './db/queries.ts';
 import {
   getPublishedPlaybooksFromFs,
   getPublishedPlaybookSummariesFromFs,
   readPublishedPlaybookFromFs,
-} from '@/lib/playbooks-fs';
+} from './playbooks-fs.ts';
 
 const CACHE_TTL_MS = 30_000;
 
@@ -131,4 +131,4 @@ export async function readPublishedPlaybook(filePath: string): Promise<string | 
   }
 }
 
-export { sanitizePublishedPath } from '@/lib/playbooks-fs';
+export { sanitizePublishedPath } from './playbooks-fs.ts';

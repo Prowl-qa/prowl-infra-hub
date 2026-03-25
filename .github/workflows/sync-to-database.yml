@@ -53,20 +53,22 @@ jobs:
         if: steps.changes.outputs.changed != ''
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          CHANGED_FILES: ${{ steps.changes.outputs.changed }}
         run: |
           while IFS= read -r file; do
             [ -z "$file" ] && continue
             echo "Importing: $file"
             npx tsx scripts/import-yaml.ts "$file"
-          done <<< "${{ steps.changes.outputs.changed }}"
+          done <<< "$CHANGED_FILES"
 
       - name: Delete removed files
         if: steps.changes.outputs.deleted != ''
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DELETED_FILES: ${{ steps.changes.outputs.deleted }}
         run: |
           while IFS= read -r file; do
             [ -z "$file" ] && continue
             echo "Deleting: $file"
             npx tsx scripts/delete-from-db.ts "$file"
-          done <<< "${{ steps.changes.outputs.deleted }}"
+          done <<< "$DELETED_FILES"
