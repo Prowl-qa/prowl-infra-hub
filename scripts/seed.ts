@@ -41,12 +41,6 @@ async function main() {
   const pool = new pg.Pool({ connectionString: databaseUrl });
   const db = drizzle(pool, { schema });
 
-  // Create JSONB GIN indexes that are still managed via raw SQL.
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_playbooks_tags ON playbooks USING GIN (tags);
-    CREATE INDEX IF NOT EXISTS idx_playbooks_compliance_tags ON playbooks USING GIN (compliance_tags);
-  `);
-
   const rootDir = process.cwd();
   let total = 0;
   let errors = 0;

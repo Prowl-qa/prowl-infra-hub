@@ -43,8 +43,8 @@ export async function GET(request: Request) {
         downloadUrl: getPlaybookDownloadUrl(playbook.filePath),
       })),
     });
-  } catch {
-    // DB unavailable — fall back to in-memory filtering
+  } catch (err) {
+    console.warn('[search] DB search unavailable, falling back to in-memory filtering', err);
   }
 
   const allPlaybooks = await getPublishedPlaybookSummaries();
