@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 import { runAnsibleTest, getSupportedPlatforms } from './drivers/ansible';
+import { updatePlaybookYamlContent } from './playbook-metadata';
 import { writeReport, type TestReport } from './reporters/json';
 
 const REPORT_DIR = '.prowl-test-reports';
@@ -64,28 +65,8 @@ async function updatePlaybookYaml(
   os: string,
   arch: string
 ): Promise<void> {
-  let content = await fs.readFile(playbookPath, 'utf8');
-
-  // Update or add tested: true
-  if (/^tested:\s*/m.test(content)) {
-    content = content.replace(/^tested:\s*.*/m, 'tested: true');
-  } else {
-    // Insert before the playbook: block
-    content = content.replace(/^(playbook:\s*\|)/m, 'tested: true\n$1');
-  }
-
-  // Update or add tested_on section
-  const newEntry = `  - os: "${os}"\n    arch: "${arch}"`;
-  if (/^tested_on:/m.test(content)) {
-    // Check if this OS/arch combo already exists
-    if (!content.includes(`os: "${os}"`)) {
-      content = content.replace(/^(tested_on:)/m, `$1\n${newEntry}`);
-    }
-  } else {
-    content = content.replace(/^(tested: true)/m, `$1\ntested_on:\n${newEntry}`);
-  }
-
-  await fs.writeFile(playbookPath, content);
+  const content = await fs.readFile(playbookPath, 'utf8');
+  await fs.writeFile(playbookPath, updatePlaybookYamlContent(content, os, arch));
 }
 
 async function testPlaybook(
