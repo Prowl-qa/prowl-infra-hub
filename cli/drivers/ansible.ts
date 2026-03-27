@@ -11,12 +11,20 @@ const DOCKER_IMAGES: Record<string, string> = {
   'amazon-linux-2023': 'geerlingguy/docker-amazonlinux2023-ansible:latest',
 };
 
+const OS_FAMILY_DEFAULTS: Record<string, string> = {
+  debian: 'ubuntu-22.04',
+  rhel: 'rhel-9',
+  agnostic: 'ubuntu-22.04',
+};
+
 const DEFAULT_OS = 'ubuntu-22.04';
 
 export interface AnsibleTestOptions {
   playbookPath: string;
   os?: string;
+  osFamily?: string;
   arch?: string;
+  checkMode?: boolean;
 }
 
 export interface AnsibleTestResult {
@@ -113,8 +121,16 @@ export function extractAnsibleTasksForInclude(tasksContent: string): string {
   throw new Error('No tasks found in playbook block');
 }
 
+export function resolveTargetOs(options: AnsibleTestOptions): string {
+  if (options.os) return options.os;
+  if (options.osFamily && OS_FAMILY_DEFAULTS[options.osFamily]) {
+    return OS_FAMILY_DEFAULTS[options.osFamily];
+  }
+  return DEFAULT_OS;
+}
+
 export async function runAnsibleTest(options: AnsibleTestOptions): Promise<AnsibleTestResult> {
-  const targetOs = options.os || DEFAULT_OS;
+  const targetOs = resolveTargetOs(options);
   const arch = options.arch || (os.arch() === 'arm64' ? 'arm64' : 'x86_64');
   const image = DOCKER_IMAGES[targetOs];
 
@@ -163,13 +179,18 @@ export async function runAnsibleTest(options: AnsibleTestOptions): Promise<Ansib
     );
 
     const start = Date.now();
+    const useCheckMode = options.checkMode !== false;
+    const moleculeCmd = useCheckMode
+      ? 'molecule converge -- --check'
+      : 'molecule converge';
 
     try {
-      execSync('molecule test', {
+      execSync(moleculeCmd, {
         cwd: tmpDir,
         env: {
           ...process.env,
           MOLECULE_NO_LOG: 'false',
+          ANSIBLE_FORCE_COLOR: '0',
         },
         stdio: 'pipe',
         timeout: 300_000, // 5 min timeout
@@ -194,6 +215,11 @@ export async function runAnsibleTest(options: AnsibleTestOptions): Promise<Ansib
       };
     }
   } finally {
+    try {
+      execSync('molecule destroy', { cwd: tmpDir, stdio: 'pipe', timeout: 60_000 });
+    } catch {
+      // Best-effort cleanup
+    }
     await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
   }
 }
