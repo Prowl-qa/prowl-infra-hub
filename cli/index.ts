@@ -60,6 +60,11 @@ function detectTool(content: string): string {
   return match ? match[1].trim().toLowerCase() : 'unknown';
 }
 
+function detectOsFamily(content: string): string {
+  const match = content.match(/^os_family:\s*(.+)$/m);
+  return match ? match[1].trim().toLowerCase() : 'agnostic';
+}
+
 async function updatePlaybookYaml(
   playbookPath: string,
   os: string,
@@ -77,17 +82,19 @@ async function testPlaybook(
 ): Promise<boolean> {
   const content = await fs.readFile(playbookPath, 'utf8');
   const tool = detectTool(content);
+  const osFamily = detectOsFamily(content);
 
   console.log(`\nTesting: ${playbookPath}`);
   console.log(`  Tool: ${tool}`);
-  console.log(`  Target: ${os || 'ubuntu-22.04'}`);
+  console.log(`  OS family: ${osFamily}`);
+  console.log(`  Target: ${os || `auto (${osFamily})`}`);
 
   if (tool !== 'ansible') {
     console.log(`  Skipped — ${tool} driver not yet implemented (Ansible-only MVP)`);
     return true;
   }
 
-  const result = await runAnsibleTest({ playbookPath, os });
+  const result = await runAnsibleTest({ playbookPath, os, osFamily });
 
   const report: TestReport = {
     playbook: playbookPath,

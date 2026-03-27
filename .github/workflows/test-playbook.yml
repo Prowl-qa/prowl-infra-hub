@@ -68,7 +68,7 @@ jobs:
           while IFS= read -r file; do
             [ -z "$file" ] && continue
             echo "::group::Testing $file"
-            npx tsx cli/index.ts test "$file" --os ubuntu-22.04 || EXIT_CODE=1
+            npx tsx cli/index.ts test "$file" || EXIT_CODE=1
             echo "::endgroup::"
           done <<< "$CHANGED_FILES"
           exit $EXIT_CODE
