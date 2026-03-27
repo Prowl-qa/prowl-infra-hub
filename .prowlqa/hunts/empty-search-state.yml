@@ -1,0 +1,42 @@
+# Empty Search State
+# Verifies the browse page shows the empty state when no playbooks match a search query.
+
+name: empty-search-state
+description: Search for a nonexistent term and verify the empty state message renders
+tags:
+  - browse
+  - search
+  - edge-case
+
+steps:
+  - navigate: "/browse"
+
+  - waitForNetworkIdle:
+      timeout: 5000
+
+  - waitForSelector:
+      selector: ".playbook-card"
+
+  # Search for something that won't match any playbook
+  - fill:
+      selector: "#browse-search"
+      value: "xyznonexistent"
+
+  # Empty state message should appear
+  - wait:
+      for: "No verified playbooks match that filter yet."
+      timeout: 3000
+
+  # Results count should show 0
+  - wait: "Showing 0 of 0 playbook"
+
+  # Clear search and verify cards return
+  - fill:
+      selector: "#browse-search"
+      value: ""
+
+  - waitForSelector:
+      selector: ".playbook-card"
+
+assertions:
+  - noConsoleErrors: true

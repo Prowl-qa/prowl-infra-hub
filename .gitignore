@@ -10,6 +10,7 @@
 
 # testing
 /coverage
+.prowl-test-reports
 
 # next.js
 /.next/

@@ -30,7 +30,7 @@ async function loadPlaybooksModule(root: string) {
   process.chdir(root);
 
   return import(
-    `${pathToFileURL(path.join(repoRoot, 'lib/playbooks.ts')).href}?root=${Date.now()}-${Math.random()}`
+    `${pathToFileURL(path.join(repoRoot, 'lib/playbooks-fs.ts')).href}?root=${Date.now()}-${Math.random()}`
   );
 }
 
@@ -47,9 +47,9 @@ test('readPublishedPlaybook rejects symlinked files that escape the category roo
     path.join(nestedDir, 'escape.yml')
   );
 
-  const { readPublishedPlaybook } = await loadPlaybooksModule(tempRoot);
+  const { readPublishedPlaybookFromFs } = await loadPlaybooksModule(tempRoot);
 
-  assert.equal(await readPublishedPlaybook('security/internal/escape.yml'), null);
+  assert.equal(await readPublishedPlaybookFromFs('security/internal/escape.yml'), null);
 });
 
 test('readPublishedPlaybook still allows nested playbooks within a published category', async () => {
@@ -61,7 +61,7 @@ test('readPublishedPlaybook still allows nested playbooks within a published cat
   await mkdir(nestedDir, { recursive: true });
   await writeFile(filePath, content);
 
-  const { readPublishedPlaybook } = await loadPlaybooksModule(tempRoot);
+  const { readPublishedPlaybookFromFs } = await loadPlaybooksModule(tempRoot);
 
-  assert.equal(await readPublishedPlaybook('security/internal/safe.yml'), content);
+  assert.equal(await readPublishedPlaybookFromFs('security/internal/safe.yml'), content);
 });

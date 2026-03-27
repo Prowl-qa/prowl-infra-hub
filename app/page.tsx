@@ -4,8 +4,21 @@ import Link from 'next/link';
 import PlaybookCard from '@/components/playbook-card';
 import SubmitForm from '@/components/submit-form';
 import { FEATURED_PLAYBOOK_IDS } from '@/lib/featured';
-import { getPublishedPlaybookSummaries } from '@/lib/playbooks';
+import { getPublishedPlaybookSummaries, type PlaybookSummary } from '@/lib/playbooks';
 import { fetchStatsFromService } from '@/lib/stats-client';
+
+async function fetchFeaturedPlaybooks(allPlaybooks: PlaybookSummary[]): Promise<PlaybookSummary[]> {
+  try {
+    const { getFeaturedPlaybooks } = await import('@/lib/db/queries');
+    const featured = await getFeaturedPlaybooks();
+    if (featured.length > 0) return featured;
+  } catch {
+    // DB unavailable — fall back to hardcoded list
+  }
+  return FEATURED_PLAYBOOK_IDS
+    .map((id) => allPlaybooks.find((p) => p.filePath === id))
+    .filter((p): p is PlaybookSummary => p != null);
+}
 
 async function fetchTotalDownloads(): Promise<string> {
   const result = await fetchStatsFromService({
@@ -31,9 +44,7 @@ export default async function HomePage() {
     fetchTotalDownloads(),
   ]);
 
-  const featuredPlaybooks = FEATURED_PLAYBOOK_IDS
-    .map((id) => playbooks.find((p) => p.filePath === id))
-    .filter((p) => p != null);
+  const featuredPlaybooks = await fetchFeaturedPlaybooks(playbooks);
 
   return (
     <>

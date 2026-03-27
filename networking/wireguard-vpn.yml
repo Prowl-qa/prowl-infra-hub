@@ -1,0 +1,102 @@
+# WireGuard VPN Server
+# Installs and configures a WireGuard VPN server on Debian-based hosts.
+# Generates server keys, configures the tunnel interface, enables IP
+# forwarding, and sets up firewall rules for VPN traffic.
+#
+# Customize:
+#   - Set INVENTORY_GROUP to target hosts
+#   - Set WG_PORT to the WireGuard listen port (default 51820)
+#   - Set WG_SUBNET to the VPN tunnel subnet (e.g., 10.0.0.0/24)
+#   - Set WG_INTERFACE to the tunnel interface name (e.g., wg0)
+#   - Set SERVER_ENDPOINT to the public IP or hostname of the server
+
+name: wireguard-vpn
+description: Install and configure a WireGuard VPN server
+tags: [networking, vpn, wireguard, security, debian]
+tool: ansible
+cloud_provider: agnostic
+os_family: debian
+risk_level: medium
+compliance_tags: []
+
+vars:
+  INVENTORY_GROUP: "{{INVENTORY_GROUP}}"
+  WG_PORT: "{{WG_PORT}}"
+  WG_SUBNET: "{{WG_SUBNET}}"
+  WG_INTERFACE: "{{WG_INTERFACE}}"
+  SERVER_ENDPOINT: "{{SERVER_ENDPOINT}}"
+
+playbook: |
+  ---
+  - hosts: "{{ inventory_group }}"
+    become: true
+    vars:
+      wg_port: "{{ wg_port | default('51820') }}"
+      wg_subnet: "{{ wg_subnet | default('10.0.0.0/24') }}"
+      wg_interface: "{{ wg_interface | default('wg0') }}"
+      wg_config_dir: /etc/wireguard
+    tasks:
+      - name: Install WireGuard packages
+        apt:
+          name:
+            - wireguard
+            - wireguard-tools
+          state: present
+          update_cache: true
+
+      - name: Generate WireGuard server private key
+        command: wg genkey
+        register: wg_private_key
+        changed_when: false
+        no_log: true
+
+      - name: Derive WireGuard server public key
+        shell: echo "{{ wg_private_key.stdout }}" | wg pubkey
+        register: wg_public_key
+        changed_when: false
+        no_log: true
+
+      - name: Create WireGuard configuration file
+        template:
+          dest: "{{ wg_config_dir }}/{{ wg_interface }}.conf"
+          mode: "0600"
+          content: |
+            [Interface]
+            Address = {{ wg_subnet | ansible.utils.ipaddr('1') }}
+            ListenPort = {{ wg_port }}
+            PrivateKey = {{ wg_private_key.stdout }}
+            PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o {{ ansible_default_ipv4.interface }} -j MASQUERADE
+            PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o {{ ansible_default_ipv4.interface }} -j MASQUERADE
+        notify: restart wireguard
+
+      - name: Enable IPv4 forwarding
+        sysctl:
+          name: net.ipv4.ip_forward
+          value: "1"
+          sysctl_set: true
+          state: present
+          reload: true
+
+      - name: Allow WireGuard port through UFW
+        ufw:
+          rule: allow
+          port: "{{ wg_port }}"
+          proto: udp
+          comment: WireGuard VPN
+        when: ansible_facts.packages is defined and 'ufw' in ansible_facts.packages
+
+      - name: Enable and start WireGuard service
+        systemd:
+          name: "wg-quick@{{ wg_interface }}"
+          enabled: true
+          state: started
+
+      - name: Display server public key
+        debug:
+          msg: "WireGuard server public key: {{ wg_public_key.stdout }}"
+
+    handlers:
+      - name: restart wireguard
+        systemd:
+          name: "wg-quick@{{ wg_interface }}"
+          state: restarted

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { getPublishedPlaybookSummaries } from '@/lib/playbooks';
+import { getPlaybookDownloadUrl, getPublishedPlaybookSummaries } from '@/lib/playbooks';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -18,6 +18,34 @@ export async function GET(request: Request) {
     .split(',')
     .map((t) => t.trim().toLowerCase())
     .filter(Boolean);
+
+  // Try DB-backed search first, fall back to in-memory filtering
+  try {
+    const { searchPlaybooks } = await import('@/lib/db/queries');
+    const { total, results } = await searchPlaybooks({
+      q: q || undefined,
+      category: category || undefined,
+      tool: tool || undefined,
+      cloudProvider: cloudProvider || undefined,
+      riskLevel: riskLevel || undefined,
+      tags: requestedTags.length > 0 ? requestedTags : undefined,
+      limit,
+      offset,
+    });
+
+    return NextResponse.json({
+      query: q || undefined,
+      total,
+      limit,
+      offset,
+      results: results.map((playbook) => ({
+        ...playbook,
+        downloadUrl: getPlaybookDownloadUrl(playbook.filePath),
+      })),
+    });
+  } catch (err) {
+    console.warn('[search] DB search unavailable, falling back to in-memory filtering', err);
+  }
 
   const allPlaybooks = await getPublishedPlaybookSummaries();
 
@@ -41,18 +69,8 @@ export async function GET(request: Request) {
   });
 
   const results = filtered.slice(offset, offset + limit).map((playbook) => ({
-    id: playbook.id,
-    name: playbook.name,
-    description: playbook.description,
-    category: playbook.category,
-    tags: playbook.tags,
-    tool: playbook.tool,
-    cloud_provider: playbook.cloudProvider,
-    os_family: playbook.osFamily,
-    risk_level: playbook.riskLevel,
-    compliance_tags: playbook.complianceTags,
-    taskCount: playbook.taskCount,
-    downloadUrl: `/api/playbooks/file?path=${encodeURIComponent(playbook.filePath)}`,
+    ...playbook,
+    downloadUrl: getPlaybookDownloadUrl(playbook.filePath),
   }));
 
   return NextResponse.json({

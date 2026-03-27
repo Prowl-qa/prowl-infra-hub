@@ -31,6 +31,7 @@ const spec = {
               },
             },
           },
+          '429': { $ref: '#/components/responses/RateLimitExceeded' },
         },
       },
     },
@@ -66,6 +67,7 @@ const spec = {
               },
             },
           },
+          '429': { $ref: '#/components/responses/RateLimitExceeded' },
         },
       },
     },
@@ -77,8 +79,16 @@ const spec = {
           { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
         ],
         responses: {
-          '200': { description: 'Playbook details with content' },
+          '200': {
+            description: 'Playbook details with content',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/PlaybookRecord' },
+              },
+            },
+          },
           '404': { description: 'Playbook not found' },
+          '429': { $ref: '#/components/responses/RateLimitExceeded' },
         },
       },
     },
@@ -94,11 +104,45 @@ const spec = {
           '200': { description: 'YAML file content', content: { 'application/x-yaml': {} } },
           '400': { description: 'Missing path parameter' },
           '404': { description: 'Playbook not found' },
+          '429': { $ref: '#/components/responses/RateLimitExceeded' },
         },
       },
     },
   },
   components: {
+    responses: {
+      RateLimitExceeded: {
+        description: 'Rate limit exceeded',
+        headers: {
+          'Retry-After': {
+            schema: { type: 'integer' },
+            description: 'Seconds to wait before retrying',
+          },
+          'X-RateLimit-Limit': {
+            schema: { type: 'integer' },
+            description: 'Total requests allowed in the current window',
+          },
+          'X-RateLimit-Remaining': {
+            schema: { type: 'integer' },
+            description: 'Requests remaining in the current window',
+          },
+          'X-RateLimit-Reset': {
+            schema: { type: 'integer' },
+            description: 'Unix timestamp when the current window resets',
+          },
+        },
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                error: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    },
     schemas: {
       PlaybookSummary: {
         type: 'object',
@@ -114,6 +158,18 @@ const spec = {
           risk_level: { type: 'string' },
           compliance_tags: { type: 'array', items: { type: 'string' } },
           taskCount: { type: 'integer' },
+          tested: { type: 'boolean', description: 'Whether this playbook has been execution-tested' },
+          testedOn: {
+            type: 'array',
+            description: 'Platforms the playbook has been tested on',
+            items: {
+              type: 'object',
+              properties: {
+                os: { type: 'string', example: 'ubuntu-22.04' },
+                arch: { type: 'string', example: 'x86_64' },
+              },
+            },
+          },
           downloadUrl: { type: 'string' },
         },
       },

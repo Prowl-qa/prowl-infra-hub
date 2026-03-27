@@ -1,0 +1,84 @@
+# SSH Hardening (RHEL)
+# Applies security best practices to SSH configuration on RHEL-based systems:
+# disables root login, enforces key-only authentication, installs fail2ban,
+# and configures SELinux for custom SSH ports.
+#
+# Customize:
+#   - Set INVENTORY_GROUP to target hosts
+#   - Adjust SSH_PORT if using a non-standard port
+#   - Set ALLOWED_USERS to restrict SSH access to specific accounts
+
+name: ssh-hardening-rhel
+description: RHEL SSH hardening with key-only auth, fail2ban, and SELinux configuration
+tags: [security, ssh, hardening, fail2ban, rhel, selinux, linux]
+tool: ansible
+cloud_provider: agnostic
+os_family: rhel
+risk_level: medium
+compliance_tags: [SOC2, CIS]
+
+vars:
+  INVENTORY_GROUP: "{{INVENTORY_GROUP}}"
+  SSH_PORT: "{{SSH_PORT}}"
+  ALLOWED_USERS: "{{ALLOWED_USERS}}"
+
+playbook: |
+  ---
+  - hosts: "{{ inventory_group }}"
+    become: true
+    tasks:
+      - name: Install fail2ban and SELinux tools
+        dnf:
+          name:
+            - fail2ban
+            - fail2ban-firewalld
+            - policycoreutils-python-utils
+          state: present
+
+      - name: Disable root login
+        lineinfile:
+          path: /etc/ssh/sshd_config
+          regexp: "^#?PermitRootLogin"
+          line: "PermitRootLogin no"
+        notify: restart sshd
+
+      - name: Disable password authentication
+        lineinfile:
+          path: /etc/ssh/sshd_config
+          regexp: "^#?PasswordAuthentication"
+          line: "PasswordAuthentication no"
+        notify: restart sshd
+
+      - name: Set SSH port
+        lineinfile:
+          path: /etc/ssh/sshd_config
+          regexp: "^#?Port"
+          line: "Port {{ ssh_port | default(22) }}"
+        notify: restart sshd
+
+      - name: Configure SELinux to allow custom SSH port
+        command: "semanage port -a -t ssh_port_t -p tcp {{ ssh_port | default(22) }}"
+        when: ssh_port is defined and ssh_port != 22
+        register: selinux_result
+        failed_when: selinux_result.rc != 0 and 'already defined' not in selinux_result.stderr
+        changed_when: selinux_result.rc == 0
+
+      - name: Restrict SSH to allowed users
+        lineinfile:
+          path: /etc/ssh/sshd_config
+          regexp: "^#?AllowUsers"
+          line: "AllowUsers {{ allowed_users | default('deploy') }}"
+        when: allowed_users is defined
+        notify: restart sshd
+
+      - name: Enable fail2ban service
+        systemd:
+          name: fail2ban
+          enabled: yes
+          state: started
+
+    handlers:
+      - name: restart sshd
+        systemd:
+          name: sshd
+          state: restarted

@@ -401,7 +401,19 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
             <p className="dialog-meta">
               {selectedPlaybook.categoryLabel} | {selectedPlaybook.tool} | {selectedPlaybook.riskLevel} risk | {selectedPlaybook.taskCount} tasks | Updated{' '}
               {toDisplayDate(selectedPlaybook.updatedAt)}
+              {' | '}
+              {selectedPlaybook.tested ? (
+                <span className="meta-pill meta-pill-tested">Execution Tested</span>
+              ) : (
+                <span className="meta-pill meta-pill-validated">Schema Validated</span>
+              )}
             </p>
+
+            {selectedPlaybook.testedOn.length > 0 && (
+              <p className="dialog-meta">
+                Tested on: {selectedPlaybook.testedOn.map((t) => `${t.os} ${t.arch}`).join(', ')}
+              </p>
+            )}
 
             <pre>
               <code>{previewContent ?? 'Loading...'}</code>

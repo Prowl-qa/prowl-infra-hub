@@ -16,7 +16,7 @@ jobs:
             ! -name '*.yml' ! -name '*.md' ! -name '*.html' ! -name '*.css' ! -name '*.js' \
             ! -name '*.mjs' ! -name '*.ts' ! -name '*.tsx' ! -name '*.d.ts' ! -name '*.json' ! -name '*.sql' \
             ! -name '*.svg' ! -name '*.png' ! -name '*.jpg' ! -name '*.jpeg' ! -name '*.webp' \
-            ! -name '*.txt' ! -name 'LICENSE' ! -name '.gitignore' \
+            ! -name '*.txt' ! -name 'LICENSE' ! -name '.gitignore' ! -name '.env.example' \
             | head -20)
           if [ -n "$INVALID_FILES" ]; then
             echo "::error::Unexpected file types detected in submission:"
@@ -165,7 +165,7 @@ jobs:
               playbook = doc.get('playbook')
               if not playbook or not isinstance(playbook, str):
                   errors.append('Missing or empty \"playbook\" field (must contain playbook YAML)')
-              else:
+              elif tool == 'ansible':
                   try:
                       pb = yaml.safe_load(playbook)
                       if isinstance(pb, list):

@@ -1,0 +1,50 @@
+# Pagination — Results Count and Single-Page Behavior
+# With fewer than 13 playbooks, pagination controls should not render.
+# Verifies results count updates when filters are applied.
+
+name: pagination
+description: Verify results count accuracy and that pagination is absent when all results fit on one page
+tags:
+  - browse
+  - pagination
+
+steps:
+  - navigate: "/browse"
+
+  - waitForNetworkIdle:
+      timeout: 5000
+
+  - waitForSelector:
+      selector: ".playbook-card"
+
+  # Results count should be visible
+  - waitForSelector:
+      selector: ".results-count"
+
+  # Pagination should NOT be present (10 playbooks < 12 per page)
+  - assert:
+      notVisible: "Previous"
+
+  - assert:
+      notVisible: "Next"
+
+  # Apply a category filter to narrow results
+  - click: "Security"
+
+  - waitForUrl:
+      value: "category=security"
+      timeout: 3000
+
+  # Results count should update to show fewer items
+  - waitForSelector:
+      selector: ".results-count"
+
+  # Reset to all
+  - click: "All"
+
+  - waitForSelector:
+      selector: ".results-count"
+
+assertions:
+  - noConsoleErrors: true
+  - urlIncludes: "/browse"
