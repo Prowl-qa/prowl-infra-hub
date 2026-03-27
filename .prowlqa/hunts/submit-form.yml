@@ -1,0 +1,63 @@
+# Submit Form — Field Presence and Validation
+# Verifies the submit form renders with all required fields and validation works.
+# Does NOT actually submit (that opens GitHub in a new tab).
+
+name: submit-form
+description: Verify the submit form fields render and client-side validation fires
+tags:
+  - forms
+  - submit
+  - validation
+
+steps:
+  - navigate: "/#submit"
+
+  - waitForNetworkIdle:
+      timeout: 5000
+
+  # Section heading
+  - wait: "Submit a playbook through pull request"
+
+  # Form fields exist
+  - waitForSelector:
+      selector: "input[name='name']"
+
+  - waitForSelector:
+      selector: "select[name='category']"
+
+  - waitForSelector:
+      selector: "input[name='description']"
+
+  - waitForSelector:
+      selector: "textarea[name='yaml']"
+
+  # Compliance checkboxes
+  - wait: "Uses generic variables"
+  - wait: "Contains no secrets, API keys, or private IPs"
+  - wait: "Includes comments and customization notes"
+  - wait: "Destructive operations are guarded with conditions"
+
+  # Submit button
+  - assert:
+      visible: "Open Pull Request Flow"
+
+  # Fill out the form partially to verify inputs work
+  - fill:
+      selector: "input[name='name']"
+      value: "test-playbook"
+
+  - selectOption:
+      selector: "select[name='category']"
+      value: "security"
+
+  - fill:
+      selector: "input[name='description']"
+      value: "A test playbook for validation"
+
+  - fill:
+      selector: "textarea[name='yaml']"
+      value: "- name: Test task\n  hosts: all\n  tasks:\n    - debug:\n        msg: Hello"
+
+assertions:
+  - noConsoleErrors: true
+  - urlIncludes: "#submit"

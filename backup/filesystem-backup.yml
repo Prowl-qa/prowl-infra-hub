@@ -1,0 +1,63 @@
+# Filesystem Backup
+# Creates rsync-based filesystem backups to a remote server with retention
+# management and post-backup verification.
+#
+# Customize:
+#   - Set INVENTORY_GROUP to target the source servers
+#   - Set BACKUP_SOURCE to the directory to back up
+#   - Set BACKUP_DEST_HOST and BACKUP_DEST_PATH for the remote destination
+#   - Adjust RETENTION_DAYS to control how long backups are kept
+
+name: filesystem-backup
+description: Rsync-based filesystem backups to a remote server
+tags: [backup, rsync, filesystem, linux]
+tool: ansible
+cloud_provider: agnostic
+os_family: agnostic
+risk_level: medium
+compliance_tags: [SOC2]
+
+vars:
+  INVENTORY_GROUP: "{{INVENTORY_GROUP}}"
+  BACKUP_SOURCE: "{{BACKUP_SOURCE}}"
+  BACKUP_DEST_HOST: "{{BACKUP_DEST_HOST}}"
+  BACKUP_DEST_PATH: "{{BACKUP_DEST_PATH}}"
+  RETENTION_DAYS: "{{RETENTION_DAYS}}"
+
+playbook: |
+  ---
+  - hosts: "{{ inventory_group }}"
+    become: true
+    vars:
+      timestamp: "{{ ansible_date_time.iso8601_basic_short }}"
+    tasks:
+      - name: Ensure rsync is installed
+        package:
+          name: rsync
+          state: present
+
+      - name: Create local staging directory for backup
+        file:
+          path: "/var/backups/staging/{{ timestamp }}"
+          state: directory
+          mode: "0750"
+
+      - name: Sync files to remote backup server
+        command: >
+          rsync -avz --delete
+          {{ backup_source }}/
+          {{ backup_dest_host }}:{{ backup_dest_path }}/{{ inventory_hostname }}/{{ timestamp }}/
+        register: rsync_result
+
+      - name: Prune old backups on remote server
+        command: >
+          ssh {{ backup_dest_host }}
+          'find {{ backup_dest_path }}/{{ inventory_hostname }} -maxdepth 1 -type d -mtime +{{ retention_days | default(30) }} -exec rm -rf {} \;'
+        when: retention_days is defined
+
+      - name: Verify backup exists on remote server
+        command: >
+          ssh {{ backup_dest_host }}
+          'test -d {{ backup_dest_path }}/{{ inventory_hostname }}/{{ timestamp }}'
+        register: verify_result
+        failed_when: verify_result.rc != 0

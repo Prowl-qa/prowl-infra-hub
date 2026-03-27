@@ -1,0 +1,107 @@
+# GCP Project Setup
+# Terraform configuration for provisioning a GCP project with billing account
+# linkage, essential API enablement, and a default service account.
+#
+# Customize:
+#   - Set GCP_ORG_ID to your Google Cloud organization ID
+#   - Set GCP_BILLING_ACCOUNT to the billing account to link
+#   - Set PROJECT_NAME to the desired project identifier
+#   - Set ENVIRONMENT to the deployment stage (dev, staging, prod)
+
+name: gcp-project-setup
+description: Provision a GCP project with billing, APIs enabled, and service accounts
+tags: [provisioning, gcp, project, terraform, iam]
+tool: terraform
+cloud_provider: gcp
+os_family: agnostic
+risk_level: medium
+compliance_tags: []
+
+vars:
+  GCP_ORG_ID: "{{GCP_ORG_ID}}"
+  GCP_BILLING_ACCOUNT: "{{GCP_BILLING_ACCOUNT}}"
+  PROJECT_NAME: "{{PROJECT_NAME}}"
+  ENVIRONMENT: "{{ENVIRONMENT}}"
+
+playbook: |
+  ---
+  provider "google" {
+    project = google_project.main.project_id
+    region  = "us-central1"
+  }
+
+  variable "gcp_org_id" {
+    description = "GCP organization ID"
+    type        = string
+  }
+
+  variable "gcp_billing_account" {
+    description = "Billing account ID to associate with the project"
+    type        = string
+  }
+
+  variable "project_name" {
+    description = "Project name used as the project ID prefix"
+    type        = string
+  }
+
+  variable "environment" {
+    description = "Deployment environment (dev, staging, prod)"
+    type        = string
+    default     = "dev"
+  }
+
+  locals {
+    project_id = "${var.project_name}-${var.environment}"
+    apis = [
+      "compute.googleapis.com",
+      "container.googleapis.com",
+      "iam.googleapis.com",
+      "logging.googleapis.com",
+      "monitoring.googleapis.com",
+      "cloudresourcemanager.googleapis.com",
+    ]
+  }
+
+  resource "google_project" "main" {
+    name            = "${var.project_name} (${var.environment})"
+    project_id      = local.project_id
+    org_id          = var.gcp_org_id
+    billing_account = var.gcp_billing_account
+
+    labels = {
+      environment = var.environment
+      managed_by  = "terraform"
+    }
+  }
+
+  resource "google_project_service" "apis" {
+    for_each = toset(local.apis)
+
+    project = google_project.main.project_id
+    service = each.value
+
+    disable_dependent_services = false
+    disable_on_destroy         = false
+  }
+
+  resource "google_service_account" "default" {
+    project      = google_project.main.project_id
+    account_id   = "${var.project_name}-sa"
+    display_name = "${var.project_name} Default Service Account"
+    description  = "Default service account for ${var.project_name} in ${var.environment}"
+
+    depends_on = [google_project_service.apis]
+  }
+
+  resource "google_project_iam_member" "sa_log_writer" {
+    project = google_project.main.project_id
+    role    = "roles/logging.logWriter"
+    member  = "serviceAccount:${google_service_account.default.email}"
+  }
+
+  resource "google_project_iam_member" "sa_metric_writer" {
+    project = google_project.main.project_id
+    role    = "roles/monitoring.metricWriter"
+    member  = "serviceAccount:${google_service_account.default.email}"
+  }

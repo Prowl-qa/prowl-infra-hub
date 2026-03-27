@@ -12,7 +12,14 @@ export default function PlaybookCard({ playbook, showTags = true, onPreview }: P
 
   return (
     <article className="playbook-card">
-      {playbook.isVerified && <span className="verified-badge">Verified</span>}
+      <div className="badge-row">
+        {playbook.isVerified && <span className="verified-badge">Verified</span>}
+        {playbook.tested ? (
+          <span className="meta-pill meta-pill-tested">Execution Tested</span>
+        ) : (
+          <span className="meta-pill meta-pill-validated">Schema Validated</span>
+        )}
+      </div>
       <h3>{playbook.title}</h3>
       <p>{playbook.description || 'Reusable infrastructure automation template.'}</p>
 
@@ -51,6 +58,14 @@ export default function PlaybookCard({ playbook, showTags = true, onPreview }: P
               {tag}
             </span>
           ))}
+        </div>
+      )}
+
+      {playbook.testedOn.length > 0 && (
+        <div className="meta-row">
+          <span className="meta-pill meta-pill-tested-on">
+            Tested on: {playbook.testedOn.map((t) => `${t.os} ${t.arch}`).join(', ')}
+          </span>
         </div>
       )}
 

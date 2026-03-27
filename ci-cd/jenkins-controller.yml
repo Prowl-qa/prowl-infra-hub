@@ -1,0 +1,53 @@
+# Jenkins Controller (Docker Compose)
+# Docker Compose setup for a Jenkins controller with persistent volumes and networking
+#
+# Customize:
+#   - JENKINS_PORT: Host port to expose the Jenkins web UI (e.g., 8080)
+#   - JENKINS_HOME: Host path for persistent Jenkins data storage
+
+name: jenkins-controller
+description: Docker Compose setup for Jenkins controller with persistent volumes
+tags: [ci-cd, jenkins, docker, controller]
+tool: docker-compose
+cloud_provider: agnostic
+os_family: agnostic
+risk_level: low
+compliance_tags: []
+
+vars:
+  JENKINS_PORT: "{{JENKINS_PORT}}"
+  JENKINS_HOME: "{{JENKINS_HOME}}"
+
+playbook: |
+  ---
+  version: "3.9"
+
+  services:
+    jenkins:
+      image: jenkins/jenkins:lts-jdk17
+      container_name: jenkins-controller
+      restart: unless-stopped
+      ports:
+        - "{{JENKINS_PORT}}:8080"
+        - "50000:50000"
+      volumes:
+        - "{{JENKINS_HOME}}:/var/jenkins_home"
+        - /var/run/docker.sock:/var/run/docker.sock
+      environment:
+        - JAVA_OPTS=-Djenkins.install.runSetupWizard=true
+      networks:
+        - jenkins-net
+      healthcheck:
+        test: ["CMD-SHELL", "curl -sf http://localhost:8080/login || exit 1"]
+        interval: 30s
+        timeout: 10s
+        retries: 5
+        start_period: 60s
+
+  volumes:
+    jenkins-data:
+      driver: local
+
+  networks:
+    jenkins-net:
+      driver: bridge

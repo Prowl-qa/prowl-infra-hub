@@ -1,0 +1,112 @@
+# Snapshot EC2 Volumes
+# Terraform configuration to create EBS volume snapshots and manage their
+# lifecycle using AWS Data Lifecycle Manager (DLM).
+#
+# Customize:
+#   - Set AWS_REGION to your target region
+#   - Set VOLUME_IDS to the EBS volume IDs to snapshot
+#   - Adjust RETENTION_DAYS for snapshot retention period
+
+name: snapshot-ec2-volumes
+description: Create EBS volume snapshots with lifecycle management via Terraform
+tags: [backup, ebs, snapshot, aws, terraform, ec2]
+tool: terraform
+cloud_provider: aws
+os_family: agnostic
+risk_level: medium
+compliance_tags: [SOC2, HIPAA]
+
+vars:
+  AWS_REGION: "{{AWS_REGION}}"
+  VOLUME_IDS: "{{VOLUME_IDS}}"
+  RETENTION_DAYS: "{{RETENTION_DAYS}}"
+
+playbook: |
+  provider "aws" {
+    region = var.aws_region
+  }
+
+  variable "aws_region" {
+    description = "AWS region for resources"
+    type        = string
+  }
+
+  variable "volume_ids" {
+    description = "List of EBS volume IDs to snapshot"
+    type        = list(string)
+  }
+
+  variable "retention_days" {
+    description = "Number of days to retain snapshots"
+    type        = number
+    default     = 14
+  }
+
+  resource "aws_ebs_snapshot" "backup" {
+    count     = length(var.volume_ids)
+    volume_id = var.volume_ids[count.index]
+
+    tags = {
+      Name       = "backup-${var.volume_ids[count.index]}"
+      ManagedBy  = "terraform"
+      Purpose    = "scheduled-backup"
+    }
+  }
+
+  resource "aws_iam_role" "dlm_lifecycle_role" {
+    name = "dlm-lifecycle-role"
+
+    assume_role_policy = jsonencode({
+      Version = "2012-10-17"
+      Statement = [{
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "dlm.amazonaws.com"
+        }
+      }]
+    })
+  }
+
+  resource "aws_iam_role_policy_attachment" "dlm_lifecycle" {
+    role       = aws_iam_role.dlm_lifecycle_role.name
+    policy_arn = "arn:aws:iam::aws:policy/service-role/AWSDataLifecycleManagerServiceRole"
+  }
+
+  resource "aws_dlm_lifecycle_policy" "snapshot_policy" {
+    description        = "Automated EBS snapshot lifecycle policy"
+    execution_role_arn = aws_iam_role.dlm_lifecycle_role.arn
+    state              = "ENABLED"
+
+    policy_details {
+      resource_types = ["VOLUME"]
+
+      target_tags = {
+        Backup = "true"
+      }
+
+      schedule {
+        name = "daily-snapshots"
+
+        create_rule {
+          interval      = 24
+          interval_unit = "HOURS"
+          times         = ["03:00"]
+        }
+
+        retain_rule {
+          count = var.retention_days
+        }
+
+        tags_to_add = {
+          SnapshotCreator = "DLM"
+        }
+
+        copy_tags = true
+      }
+    }
+
+    tags = {
+      ManagedBy = "terraform"
+    }
+  }

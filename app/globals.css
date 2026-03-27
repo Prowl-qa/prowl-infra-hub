@@ -503,6 +503,31 @@ main {
   font-size: 0.7rem;
 }
 
+.meta-pill-tested {
+  background: color-mix(in srgb, #d4edda 85%, transparent);
+  border-color: #28a745;
+  color: #155724;
+}
+
+.meta-pill-validated {
+  background: color-mix(in srgb, #e9ecef 85%, transparent);
+  border-color: #8c8c8c;
+  color: #555;
+}
+
+.meta-pill-tested-on {
+  background: color-mix(in srgb, #d5eeff 60%, transparent);
+  border-color: #4a90b8;
+  font-size: 0.7rem;
+}
+
+.badge-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+
 .meta-pill-risk-low {
   background: color-mix(in srgb, #d1fae5 78%, transparent);
   border-color: #6ee7b7;
