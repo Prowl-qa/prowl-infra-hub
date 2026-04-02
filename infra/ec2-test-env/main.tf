@@ -1,0 +1,208 @@
+terraform {
+  required_version = ">= 1.5"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+
+  default_tags {
+    tags = {
+      Project   = var.project_tag
+      ManagedBy = "terraform"
+    }
+  }
+}
+
+# -----------------------------------------------------------------------------
+# GitHub Actions OIDC Provider
+# Allows GitHub Actions to assume IAM roles without static credentials.
+# -----------------------------------------------------------------------------
+
+resource "aws_iam_openid_connect_provider" "github" {
+  url             = "https://token.actions.githubusercontent.com"
+  client_id_list  = ["sts.amazonaws.com"]
+  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
+}
+
+# -----------------------------------------------------------------------------
+# IAM Role for GitHub Actions
+# Scoped to specific repo, restricted to allowed instance types.
+# -----------------------------------------------------------------------------
+
+data "aws_iam_policy_document" "github_actions_assume" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    effect  = "Allow"
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringLike"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:${var.github_org}/${var.github_repo}:*"]
+    }
+  }
+}
+
+resource "aws_iam_role" "molecule_test" {
+  name               = "prowl-molecule-gh-actions"
+  assume_role_policy = data.aws_iam_policy_document.github_actions_assume.json
+}
+
+data "aws_iam_policy_document" "molecule_ec2" {
+  # EC2 instance lifecycle
+  statement {
+    sid    = "EC2InstanceLifecycle"
+    effect = "Allow"
+    actions = [
+      "ec2:RunInstances",
+      "ec2:TerminateInstances",
+      "ec2:DescribeInstances",
+      "ec2:DescribeInstanceStatus",
+      "ec2:CreateTags",
+      "ec2:DescribeImages",
+      "ec2:DescribeKeyPairs",
+      "ec2:DescribeSecurityGroups",
+      "ec2:DescribeSubnets",
+      "ec2:DescribeVpcs",
+    ]
+    resources = ["*"]
+  }
+
+  # Restrict instance types that can be launched
+  statement {
+    sid       = "RestrictInstanceTypes"
+    effect    = "Deny"
+    actions   = ["ec2:RunInstances"]
+    resources = ["arn:aws:ec2:*:*:instance/*"]
+
+    condition {
+      test     = "ForAnyValue:StringNotEquals"
+      variable = "ec2:InstanceType"
+      values   = var.allowed_instance_types
+    }
+  }
+
+  # Restrict to spot instances only (cost control)
+  statement {
+    sid       = "RequireSpotInstances"
+    effect    = "Deny"
+    actions   = ["ec2:RunInstances"]
+    resources = ["arn:aws:ec2:*:*:instance/*"]
+
+    condition {
+      test     = "StringNotEquals"
+      variable = "ec2:InstanceMarketType"
+      values   = ["spot"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "molecule_ec2" {
+  name   = "prowl-molecule-ec2-access"
+  role   = aws_iam_role.molecule_test.id
+  policy = data.aws_iam_policy_document.molecule_ec2.json
+}
+
+# -----------------------------------------------------------------------------
+# VPC + Subnet (dedicated to testing, isolated from any production resources)
+# -----------------------------------------------------------------------------
+
+resource "aws_vpc" "test" {
+  cidr_block           = "10.200.0.0/16"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+
+  tags = { Name = "prowl-test-vpc" }
+}
+
+resource "aws_internet_gateway" "test" {
+  vpc_id = aws_vpc.test.id
+  tags   = { Name = "prowl-test-igw" }
+}
+
+resource "aws_subnet" "test" {
+  vpc_id                  = aws_vpc.test.id
+  cidr_block              = "10.200.1.0/24"
+  map_public_ip_on_launch = true
+  availability_zone       = "${var.aws_region}a"
+
+  tags = { Name = "prowl-test-subnet" }
+}
+
+resource "aws_route_table" "test" {
+  vpc_id = aws_vpc.test.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.test.id
+  }
+
+  tags = { Name = "prowl-test-rt" }
+}
+
+resource "aws_route_table_association" "test" {
+  subnet_id      = aws_subnet.test.id
+  route_table_id = aws_route_table.test.id
+}
+
+# -----------------------------------------------------------------------------
+# Security Group — SSH ingress only, all egress
+# -----------------------------------------------------------------------------
+
+resource "aws_security_group" "molecule" {
+  name        = "prowl-molecule-sg"
+  description = "Allow SSH for Molecule playbook testing"
+  vpc_id      = aws_vpc.test.id
+
+  ingress {
+    description = "SSH from anywhere (ephemeral CI runners)"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "All outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "prowl-molecule-sg" }
+}
+
+# -----------------------------------------------------------------------------
+# SSH Key Pair — generated locally, public key uploaded to AWS
+# -----------------------------------------------------------------------------
+
+resource "tls_private_key" "molecule" {
+  algorithm = "ED25519"
+}
+
+resource "aws_key_pair" "molecule" {
+  key_name   = "prowl-molecule-key"
+  public_key = tls_private_key.molecule.public_key_openssh
+}
