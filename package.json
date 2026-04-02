@@ -12,7 +12,9 @@
     "db:push": "drizzle-kit push",
     "db:seed": "npx tsx scripts/seed.ts",
     "test:playbook": "npx tsx cli/index.ts test",
-    "test:playbook:all": "npx tsx cli/index.ts test --all"
+    "test:playbook:all": "npx tsx cli/index.ts test --all",
+    "test:playbook:ec2": "npx tsx cli/index.ts test --driver ec2",
+    "test:playbook:ec2:all": "npx tsx cli/index.ts test --all --driver ec2 --env all"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.1",
