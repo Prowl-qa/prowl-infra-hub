@@ -33,6 +33,7 @@ export interface AnsibleTestResult {
   arch: string;
   duration_ms: number;
   error?: string;
+  driver: 'docker' | 'ec2';
 }
 
 function getMoleculeYaml(image: string, playbookFile: string): string {
@@ -140,6 +141,7 @@ export async function runAnsibleTest(options: AnsibleTestOptions): Promise<Ansib
       os: targetOs,
       arch,
       duration_ms: 0,
+      driver: 'docker',
       error: `Unsupported OS target: ${targetOs}. Supported: ${Object.keys(DOCKER_IMAGES).join(', ')}`,
     };
   }
@@ -158,6 +160,7 @@ export async function runAnsibleTest(options: AnsibleTestOptions): Promise<Ansib
         os: targetOs,
         arch,
         duration_ms: 0,
+        driver: 'docker',
         error: 'No playbook: | block found in template file',
       };
     }
@@ -201,6 +204,7 @@ export async function runAnsibleTest(options: AnsibleTestOptions): Promise<Ansib
         os: targetOs,
         arch,
         duration_ms: Date.now() - start,
+        driver: 'docker',
       };
     } catch (err) {
       const error = err as { stderr?: Buffer; stdout?: Buffer };
@@ -211,6 +215,7 @@ export async function runAnsibleTest(options: AnsibleTestOptions): Promise<Ansib
         os: targetOs,
         arch,
         duration_ms: Date.now() - start,
+        driver: 'docker',
         error: stderr || stdout || 'Molecule test failed',
       };
     }
