@@ -32,7 +32,12 @@ jobs:
 
       - name: Verify SSH key format
         run: |
+          trap 'rm -f /tmp/test-key.pem' EXIT
           echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > /tmp/test-key.pem
           chmod 600 /tmp/test-key.pem
-          ssh-keygen -l -f /tmp/test-key.pem && echo "SSH key is valid" || echo "SSH key is INVALID"
-          rm -f /tmp/test-key.pem
+          if ssh-keygen -l -f /tmp/test-key.pem >/dev/null 2>&1; then
+            echo "SSH key is valid"
+          else
+            echo "SSH key is INVALID" >&2
+            exit 1
+          fi

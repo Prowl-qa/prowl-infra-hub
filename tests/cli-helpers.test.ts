@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { getTerminateTaggedEc2InstancesFallbackCommand } from '../cli/drivers/ansible-ec2.ts';
 import { extractAnsibleTasksForInclude } from '../cli/drivers/ansible.ts';
 import { updatePlaybookYamlContent } from '../cli/playbook-metadata.ts';
 
@@ -118,4 +119,13 @@ playbook: |
   const updated = updatePlaybookYamlContent(original, 'ubuntu-22.04', 'arm64');
   assert.match(updated, /os: "ubuntu-22\.04"\n    arch: "arm64"/);
   assert.match(updated, /os: "ubuntu-22\.04"\n    arch: "x86_64"/);
+});
+
+test('getTerminateTaggedEc2InstancesFallbackCommand keeps instance ids attached to --instance-ids', () => {
+  const command = getTerminateTaggedEc2InstancesFallbackCommand('ubuntu-2204', 'us-east-1');
+
+  assert.match(command, /Name=tag:environment,Values=ubuntu-2204/);
+  assert.match(command, /aws ec2 terminate-instances --instance-ids \$INSTANCE_IDS --region us-east-1/);
+  assert.doesNotMatch(command, /aws ec2 terminate-instances --instance-ids --region us-east-1/);
+  assert.doesNotMatch(command, /xargs/);
 });
