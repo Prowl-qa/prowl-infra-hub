@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-import { extractAnsibleTasksForInclude, type AnsibleTestResult } from './ansible';
+import { extractAnsibleTasksForInclude, type AnsibleTestResult } from './ansible.ts';
 
 // ---------------------------------------------------------------------------
 // Environment profiles — full OS + Python + security configurations matching
@@ -195,6 +195,13 @@ function getConvergePlaybook(playbookPath: string): string {
   `;
 }
 
+export function getTerminateTaggedEc2InstancesFallbackCommand(envProfile: string, region: string): string {
+  return `INSTANCE_IDS=$(aws ec2 describe-instances --filters "Name=tag:prowl-test,Values=true" "Name=tag:environment,Values=${envProfile}" "Name=instance-state-name,Values=running,pending" --query "Reservations[].Instances[].InstanceId" --output text --region ${region})
+if [ -n "$INSTANCE_IDS" ] && [ "$INSTANCE_IDS" != "None" ]; then
+  aws ec2 terminate-instances --instance-ids $INSTANCE_IDS --region ${region}
+fi`;
+}
+
 // ---------------------------------------------------------------------------
 // Main test runner
 // ---------------------------------------------------------------------------
@@ -308,10 +315,10 @@ export async function runEc2AnsibleTest(options: Ec2TestOptions): Promise<Ansibl
     } catch {
       // Fallback: terminate any tagged instances directly
       try {
-        execSync(
-          `aws ec2 describe-instances --filters "Name=tag:prowl-test,Values=true" "Name=tag:environment,Values=${options.envProfile}" "Name=instance-state-name,Values=running,pending" --query "Reservations[].Instances[].InstanceId" --output text --region ${region} | xargs -r aws ec2 terminate-instances --instance-ids --region ${region}`,
-          { stdio: 'pipe', timeout: 30_000 }
-        );
+        execSync(getTerminateTaggedEc2InstancesFallbackCommand(options.envProfile, region), {
+          stdio: 'pipe',
+          timeout: 30_000,
+        });
       } catch {
         console.error(`  WARNING: Failed to clean up EC2 instance for ${options.envProfile}. Check AWS console.`);
       }
