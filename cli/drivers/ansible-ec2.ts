@@ -6,6 +6,9 @@ import os from 'node:os';
 
 import { extractAnsibleTasksForInclude, type AnsibleTestResult } from './ansible.ts';
 
+const EC2_TEST_PROJECT_TAG = 'ec2-test-env';
+const MOLECULE_MAX_BUFFER = 10 * 1024 * 1024;
+
 // ---------------------------------------------------------------------------
 // Environment profiles — full OS + Python + security configurations matching
 // documented enterprise deployments (2025-2026).
@@ -110,7 +113,7 @@ export interface Ec2TestOptions {
 }
 
 export function extractPlaybookBlock(content: string): string | null {
-  return content.match(/^playbook:\s*\|\n([\s\S]*?)(?=^[^ \t\r\n][^:\n]*:(?:\s|$)|\Z)/m)?.[1] ?? null;
+  return content.match(/^playbook:\s*\|\r?\n([\s\S]*?)(?=^[^ \t\r\n][^:\r\n]*:(?:\s|$)|$(?![\s\S]))/m)?.[1] ?? null;
 }
 
 function resolveAmi(profile: EnvironmentProfile, region: string): string {
@@ -175,6 +178,7 @@ platforms:
     spot_max_price: "0.02"
     instance_tags:
       prowl-test: "true"
+      Project: ${EC2_TEST_PROJECT_TAG}
       managed-by: molecule
       environment: ${options.envProfile}
       prowl-test-run: ${testRunId}
@@ -207,7 +211,7 @@ export function getTerminateTaggedEc2InstancesFallbackCommand(
   region: string,
   testRunId: string
 ): string {
-  return `INSTANCE_IDS=$(aws ec2 describe-instances --filters "Name=tag:prowl-test,Values=true" "Name=tag:environment,Values=${envProfile}" "Name=tag:prowl-test-run,Values=${testRunId}" "Name=instance-state-name,Values=running,pending" --query "Reservations[].Instances[].InstanceId" --output text --region ${region})
+  return `INSTANCE_IDS=$(aws ec2 describe-instances --filters "Name=tag:prowl-test,Values=true" "Name=tag:Project,Values=${EC2_TEST_PROJECT_TAG}" "Name=tag:environment,Values=${envProfile}" "Name=tag:prowl-test-run,Values=${testRunId}" "Name=instance-state-name,Values=running,pending" --query "Reservations[].Instances[].InstanceId" --output text --region ${region})
 if [ -n "$INSTANCE_IDS" ] && [ "$INSTANCE_IDS" != "None" ]; then
   aws ec2 terminate-instances --instance-ids $INSTANCE_IDS --region ${region}
 fi`;
@@ -254,36 +258,47 @@ export async function runEc2AnsibleTest(options: Ec2TestOptions): Promise<Ansibl
   const testRunId = randomUUID();
 
   try {
-    // Extract the playbook block from the YAML template
-    const content = await fs.readFile(absolutePlaybook, 'utf8');
-    const playbookMatch = extractPlaybookBlock(content);
+    try {
+      // Extract the playbook block from the YAML template
+      const content = await fs.readFile(absolutePlaybook, 'utf8');
+      const playbookMatch = extractPlaybookBlock(content);
 
-    if (!playbookMatch) {
+      if (!playbookMatch) {
+        return {
+          passed: false,
+          os: profile.os,
+          arch: 'x86_64',
+          duration_ms: 0,
+          driver: 'ec2',
+          error: 'No playbook: | block found in template file',
+        };
+      }
+
+      // Write extracted tasks
+      const tasksFile = path.join(tmpDir, 'tasks.yml');
+      await fs.writeFile(tasksFile, extractAnsibleTasksForInclude(playbookMatch));
+
+      // Write converge playbook
+      const convergeFile = path.join(tmpDir, 'converge.yml');
+      await fs.writeFile(convergeFile, getConvergePlaybook(tasksFile));
+
+      // Write Molecule config
+      const moleculeDir = path.join(tmpDir, 'molecule', 'default');
+      await fs.mkdir(moleculeDir, { recursive: true });
+      await fs.writeFile(
+        path.join(moleculeDir, 'molecule.yml'),
+        getEc2MoleculeYaml(ami, profile, instanceType, convergeFile, options, testRunId)
+      );
+    } catch (err) {
       return {
         passed: false,
         os: profile.os,
         arch: 'x86_64',
         duration_ms: 0,
         driver: 'ec2',
-        error: 'No playbook: | block found in template file',
+        error: err instanceof Error ? err.message : String(err),
       };
     }
-
-    // Write extracted tasks
-    const tasksFile = path.join(tmpDir, 'tasks.yml');
-    await fs.writeFile(tasksFile, extractAnsibleTasksForInclude(playbookMatch));
-
-    // Write converge playbook
-    const convergeFile = path.join(tmpDir, 'converge.yml');
-    await fs.writeFile(convergeFile, getConvergePlaybook(tasksFile));
-
-    // Write Molecule config
-    const moleculeDir = path.join(tmpDir, 'molecule', 'default');
-    await fs.mkdir(moleculeDir, { recursive: true });
-    await fs.writeFile(
-      path.join(moleculeDir, 'molecule.yml'),
-      getEc2MoleculeYaml(ami, profile, instanceType, convergeFile, options, testRunId)
-    );
 
     const start = Date.now();
 
@@ -296,6 +311,7 @@ export async function runEc2AnsibleTest(options: Ec2TestOptions): Promise<Ansibl
           MOLECULE_NO_LOG: 'false',
           ANSIBLE_FORCE_COLOR: '0',
         },
+        maxBuffer: MOLECULE_MAX_BUFFER,
         stdio: 'pipe',
         timeout: 600_000, // 10 min timeout
       });
@@ -323,7 +339,12 @@ export async function runEc2AnsibleTest(options: Ec2TestOptions): Promise<Ansibl
   } finally {
     // Destroy the EC2 instance via Molecule
     try {
-      execSync('molecule destroy', { cwd: tmpDir, stdio: 'pipe', timeout: 120_000 });
+      execSync('molecule destroy', {
+        cwd: tmpDir,
+        maxBuffer: MOLECULE_MAX_BUFFER,
+        stdio: 'pipe',
+        timeout: 120_000,
+      });
     } catch {
       // Fallback: terminate any tagged instances directly
       try {

@@ -125,6 +125,7 @@ test('getTerminateTaggedEc2InstancesFallbackCommand keeps instance ids attached 
   const command = getTerminateTaggedEc2InstancesFallbackCommand('ubuntu-2204', 'us-east-1', 'run-123');
 
   assert.match(command, /Name=tag:environment,Values=ubuntu-2204/);
+  assert.match(command, /Name=tag:Project,Values=ec2-test-env/);
   assert.match(command, /Name=tag:prowl-test-run,Values=run-123/);
   assert.match(command, /aws ec2 terminate-instances --instance-ids \$INSTANCE_IDS --region us-east-1/);
   assert.doesNotMatch(command, /aws ec2 terminate-instances --instance-ids --region us-east-1/);
@@ -155,6 +156,50 @@ vars:
         ansible.builtin.debug:
           msg: hi
 
+`
+  );
+});
+
+test('extractPlaybookBlock handles playbook as the final top-level key', () => {
+  const unixContent = `name: sample
+description: sample
+playbook: |
+  ---
+  - hosts: all
+    tasks:
+      - name: Hello
+        ansible.builtin.debug:
+          msg: hi`;
+
+  const windowsContent = `name: sample\r
+description: sample\r
+playbook: |\r
+  ---\r
+  - hosts: all\r
+    tasks:\r
+      - name: Hello\r
+        ansible.builtin.debug:\r
+          msg: hi\r
+`;
+
+  assert.equal(
+    extractPlaybookBlock(unixContent),
+    `  ---
+  - hosts: all
+    tasks:
+      - name: Hello
+        ansible.builtin.debug:
+          msg: hi`
+  );
+
+  assert.equal(
+    extractPlaybookBlock(windowsContent),
+    `  ---\r
+  - hosts: all\r
+    tasks:\r
+      - name: Hello\r
+        ansible.builtin.debug:\r
+          msg: hi\r
 `
   );
 });

@@ -1,5 +1,7 @@
 # -----------------------------------------------------------------------------
 # Values to copy into GitHub Secrets (Settings > Secrets and variables > Actions)
+# Generate the ED25519 key locally and store the private key in GitHub Secrets;
+# Terraform now manages only the public key registration in AWS.
 # -----------------------------------------------------------------------------
 
 output "aws_role_arn" {
@@ -20,12 +22,6 @@ output "ec2_security_group_id" {
 output "ec2_key_pair_name" {
   description = "GitHub Secret: EC2_KEY_PAIR_NAME — AWS key pair name"
   value       = aws_key_pair.molecule.key_name
-}
-
-output "ec2_ssh_private_key" {
-  description = "GitHub Secret: EC2_SSH_PRIVATE_KEY — SSH private key (sensitive)"
-  value       = tls_private_key.molecule.private_key_openssh
-  sensitive   = true
 }
 
 # -----------------------------------------------------------------------------
