@@ -30,9 +30,8 @@ provider "aws" {
 # -----------------------------------------------------------------------------
 
 resource "aws_iam_openid_connect_provider" "github" {
-  url             = "https://token.actions.githubusercontent.com"
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
+  url            = "https://token.actions.githubusercontent.com"
+  client_id_list = ["sts.amazonaws.com"]
 }
 
 # -----------------------------------------------------------------------------
@@ -175,6 +174,11 @@ resource "aws_security_group" "molecule" {
   description = "Allow SSH for Molecule playbook testing"
   vpc_id      = aws_vpc.test.id
 
+  # Intentional exception for AWS-0107 and AWS-0104: this security group is
+  # limited to an isolated test VPC used only by ephemeral CI-launched
+  # instances. SSH ingress from 0.0.0.0/0 is required because GitHub-hosted
+  # runners have dynamic public IPs, and unrestricted egress keeps disposable
+  # Molecule test instances functional during CI runs.
   ingress {
     description = "SSH from anywhere (ephemeral CI runners)"
     from_port   = 22
