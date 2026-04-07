@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -108,6 +109,10 @@ export interface Ec2TestOptions {
   sshKeyPath: string;
 }
 
+export function extractPlaybookBlock(content: string): string | null {
+  return content.match(/^playbook:\s*\|\n([\s\S]*?)(?=^[^ \t\r\n][^:\n]*:(?:\s|$)|\Z)/m)?.[1] ?? null;
+}
+
 function resolveAmi(profile: EnvironmentProfile, region: string): string {
   // Try SSM parameter first (gives us the latest official AMI)
   if (profile.amiSsmParam) {
@@ -148,7 +153,8 @@ function getEc2MoleculeYaml(
   profile: EnvironmentProfile,
   instanceType: string,
   convergeFile: string,
-  options: Ec2TestOptions
+  options: Ec2TestOptions,
+  testRunId: string
 ): string {
   const timestamp = Date.now();
   return `---
@@ -171,6 +177,7 @@ platforms:
       prowl-test: "true"
       managed-by: molecule
       environment: ${options.envProfile}
+      prowl-test-run: ${testRunId}
 provisioner:
   name: ansible
   connection_options:
@@ -195,8 +202,12 @@ function getConvergePlaybook(playbookPath: string): string {
   `;
 }
 
-export function getTerminateTaggedEc2InstancesFallbackCommand(envProfile: string, region: string): string {
-  return `INSTANCE_IDS=$(aws ec2 describe-instances --filters "Name=tag:prowl-test,Values=true" "Name=tag:environment,Values=${envProfile}" "Name=instance-state-name,Values=running,pending" --query "Reservations[].Instances[].InstanceId" --output text --region ${region})
+export function getTerminateTaggedEc2InstancesFallbackCommand(
+  envProfile: string,
+  region: string,
+  testRunId: string
+): string {
+  return `INSTANCE_IDS=$(aws ec2 describe-instances --filters "Name=tag:prowl-test,Values=true" "Name=tag:environment,Values=${envProfile}" "Name=tag:prowl-test-run,Values=${testRunId}" "Name=instance-state-name,Values=running,pending" --query "Reservations[].Instances[].InstanceId" --output text --region ${region})
 if [ -n "$INSTANCE_IDS" ] && [ "$INSTANCE_IDS" != "None" ]; then
   aws ec2 terminate-instances --instance-ids $INSTANCE_IDS --region ${region}
 fi`;
@@ -240,11 +251,12 @@ export async function runEc2AnsibleTest(options: Ec2TestOptions): Promise<Ansibl
 
   const absolutePlaybook = path.resolve(options.playbookPath);
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prowl-ec2-test-'));
+  const testRunId = randomUUID();
 
   try {
     // Extract the playbook block from the YAML template
     const content = await fs.readFile(absolutePlaybook, 'utf8');
-    const playbookMatch = content.match(/^playbook:\s*\|\n([\s\S]*)$/m);
+    const playbookMatch = extractPlaybookBlock(content);
 
     if (!playbookMatch) {
       return {
@@ -259,7 +271,7 @@ export async function runEc2AnsibleTest(options: Ec2TestOptions): Promise<Ansibl
 
     // Write extracted tasks
     const tasksFile = path.join(tmpDir, 'tasks.yml');
-    await fs.writeFile(tasksFile, extractAnsibleTasksForInclude(playbookMatch[1]));
+    await fs.writeFile(tasksFile, extractAnsibleTasksForInclude(playbookMatch));
 
     // Write converge playbook
     const convergeFile = path.join(tmpDir, 'converge.yml');
@@ -270,7 +282,7 @@ export async function runEc2AnsibleTest(options: Ec2TestOptions): Promise<Ansibl
     await fs.mkdir(moleculeDir, { recursive: true });
     await fs.writeFile(
       path.join(moleculeDir, 'molecule.yml'),
-      getEc2MoleculeYaml(ami, profile, instanceType, convergeFile, options)
+      getEc2MoleculeYaml(ami, profile, instanceType, convergeFile, options, testRunId)
     );
 
     const start = Date.now();
@@ -315,7 +327,7 @@ export async function runEc2AnsibleTest(options: Ec2TestOptions): Promise<Ansibl
     } catch {
       // Fallback: terminate any tagged instances directly
       try {
-        execSync(getTerminateTaggedEc2InstancesFallbackCommand(options.envProfile, region), {
+        execSync(getTerminateTaggedEc2InstancesFallbackCommand(options.envProfile, region, testRunId), {
           stdio: 'pipe',
           timeout: 30_000,
         });

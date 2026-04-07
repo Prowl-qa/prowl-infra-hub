@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { getTerminateTaggedEc2InstancesFallbackCommand } from '../cli/drivers/ansible-ec2.ts';
+import { extractPlaybookBlock, getTerminateTaggedEc2InstancesFallbackCommand } from '../cli/drivers/ansible-ec2.ts';
 import { extractAnsibleTasksForInclude } from '../cli/drivers/ansible.ts';
 import { updatePlaybookYamlContent } from '../cli/playbook-metadata.ts';
 
@@ -122,10 +122,39 @@ playbook: |
 });
 
 test('getTerminateTaggedEc2InstancesFallbackCommand keeps instance ids attached to --instance-ids', () => {
-  const command = getTerminateTaggedEc2InstancesFallbackCommand('ubuntu-2204', 'us-east-1');
+  const command = getTerminateTaggedEc2InstancesFallbackCommand('ubuntu-2204', 'us-east-1', 'run-123');
 
   assert.match(command, /Name=tag:environment,Values=ubuntu-2204/);
+  assert.match(command, /Name=tag:prowl-test-run,Values=run-123/);
   assert.match(command, /aws ec2 terminate-instances --instance-ids \$INSTANCE_IDS --region us-east-1/);
   assert.doesNotMatch(command, /aws ec2 terminate-instances --instance-ids --region us-east-1/);
   assert.doesNotMatch(command, /xargs/);
+});
+
+test('extractPlaybookBlock stops before the next top-level YAML key', () => {
+  const content = `name: sample
+description: sample
+playbook: |
+  ---
+  - hosts: all
+    tasks:
+      - name: Hello
+        ansible.builtin.debug:
+          msg: hi
+
+vars:
+  GREETING: hello
+`;
+
+  assert.equal(
+    extractPlaybookBlock(content),
+    `  ---
+  - hosts: all
+    tasks:
+      - name: Hello
+        ansible.builtin.debug:
+          msg: hi
+
+`
+  );
 });

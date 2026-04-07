@@ -12,9 +12,10 @@ jobs:
 
       - name: Check file types
         run: |
-          INVALID_FILES=$(find . -not -path './.git/*' -not -path './.github/*' -not -path './.next/*' -not -path './infra/*' -type f \
+          INVALID_FILES=$(find . -not -path './.git/*' -not -path './.github/*' -not -path './.next/*' -type f \
             ! -name '*.yml' ! -name '*.md' ! -name '*.html' ! -name '*.css' ! -name '*.js' \
             ! -name '*.mjs' ! -name '*.ts' ! -name '*.tsx' ! -name '*.d.ts' ! -name '*.json' ! -name '*.sql' \
+            ! -name '*.tf' ! -name '*.tfvars' ! -name '*.tf.json' ! -name '*.hcl' \
             ! -name '*.svg' ! -name '*.png' ! -name '*.jpg' ! -name '*.jpeg' ! -name '*.webp' \
             ! -name '*.txt' ! -name 'LICENSE' ! -name '.gitignore' ! -name '.env.example' \
             | head -20)
