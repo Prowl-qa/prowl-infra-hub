@@ -6,10 +6,6 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
-    tls = {
-      source  = "hashicorp/tls"
-      version = "~> 4.0"
-    }
   }
 }
 
@@ -56,9 +52,9 @@ data "aws_iam_policy_document" "github_actions_assume" {
     }
 
     condition {
-      test     = "StringLike"
+      test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_org}/${var.github_repo}:*"]
+      values   = ["repo:${var.github_org}/${var.github_repo}:ref:${var.github_ref}"]
     }
   }
 }
@@ -75,10 +71,8 @@ data "aws_iam_policy_document" "molecule_ec2" {
     effect = "Allow"
     actions = [
       "ec2:RunInstances",
-      "ec2:TerminateInstances",
       "ec2:DescribeInstances",
       "ec2:DescribeInstanceStatus",
-      "ec2:CreateTags",
       "ec2:DescribeImages",
       "ec2:DescribeKeyPairs",
       "ec2:DescribeSecurityGroups",
@@ -86,6 +80,38 @@ data "aws_iam_policy_document" "molecule_ec2" {
       "ec2:DescribeVpcs",
     ]
     resources = ["*"]
+  }
+
+  statement {
+    sid       = "EC2TerminateProjectInstances"
+    effect    = "Allow"
+    actions   = ["ec2:TerminateInstances"]
+    resources = ["arn:aws:ec2:*:*:instance/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:ResourceTag/Project"
+      values   = ["ec2-test-env"]
+    }
+  }
+
+  statement {
+    sid       = "EC2TagProjectInstances"
+    effect    = "Allow"
+    actions   = ["ec2:CreateTags"]
+    resources = ["arn:aws:ec2:*:*:instance/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/Project"
+      values   = ["ec2-test-env"]
+    }
+
+    condition {
+      test     = "ForAllValues:StringEquals"
+      variable = "aws:TagKeys"
+      values   = ["Project", "environment", "managed-by", "prowl-test", "prowl-test-run"]
+    }
   }
 
   # Restrict instance types that can be launched
@@ -144,7 +170,7 @@ resource "aws_subnet" "test" {
   vpc_id                  = aws_vpc.test.id
   cidr_block              = "10.200.1.0/24"
   map_public_ip_on_launch = true
-  availability_zone       = "${var.aws_region}a"
+  availability_zone       = data.aws_availability_zones.available.names[0]
 
   tags = { Name = "prowl-test-subnet" }
 }
@@ -163,6 +189,10 @@ resource "aws_route_table" "test" {
 resource "aws_route_table_association" "test" {
   subnet_id      = aws_subnet.test.id
   route_table_id = aws_route_table.test.id
+}
+
+data "aws_availability_zones" "available" {
+  state = "available"
 }
 
 # -----------------------------------------------------------------------------
@@ -199,14 +229,10 @@ resource "aws_security_group" "molecule" {
 }
 
 # -----------------------------------------------------------------------------
-# SSH Key Pair — generated locally, public key uploaded to AWS
+# SSH Key Pair — public key supplied externally, private key stays outside Terraform
 # -----------------------------------------------------------------------------
-
-resource "tls_private_key" "molecule" {
-  algorithm = "ED25519"
-}
 
 resource "aws_key_pair" "molecule" {
   key_name   = "prowl-molecule-key"
-  public_key = tls_private_key.molecule.public_key_openssh
+  public_key = var.molecule_public_key
 }

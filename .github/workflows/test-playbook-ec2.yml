@@ -128,7 +128,7 @@ jobs:
         run: |
           echo "Checking for leaked prowl-test instances..."
           INSTANCE_IDS=$(aws ec2 describe-instances \
-            --filters "Name=tag:prowl-test,Values=true" "Name=instance-state-name,Values=running,pending" \
+            --filters "Name=tag:prowl-test,Values=true" "Name=tag:Project,Values=ec2-test-env" "Name=instance-state-name,Values=running,pending" \
             --query "Reservations[].Instances[?LaunchTime<='$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -u -v-30M +%Y-%m-%dT%H:%M:%S)'].InstanceId" \
             --output text 2>/dev/null || true)
 
@@ -179,7 +179,7 @@ jobs:
             fi
 
             if [ "$DURATION" -gt 1000 ] 2>/dev/null; then
-              DURATION_FMT="$(echo "scale=1; $DURATION / 1000" | bc)s"
+              DURATION_FMT="$(awk -v ms="$DURATION" 'BEGIN { printf "%.1fs", ms / 1000 }')"
             else
               DURATION_FMT="${DURATION}ms"
             fi

@@ -16,6 +16,12 @@ variable "github_repo" {
   default     = "prowl-infra-hub"
 }
 
+variable "github_ref" {
+  description = "Git ref allowed to assume the GitHub Actions OIDC role"
+  type        = string
+  default     = "refs/heads/test-run"
+}
+
 variable "allowed_instance_types" {
   description = "EC2 instance types the test role is allowed to launch"
   type        = list(string)
@@ -26,4 +32,9 @@ variable "project_tag" {
   description = "Tag applied to all resources for identification and cleanup"
   type        = string
   default     = "prowl-infra-test"
+}
+
+variable "molecule_public_key" {
+  description = "ED25519 public key for the EC2 test key pair. Generate locally and pass via -var or tfvars; store the private key outside Terraform."
+  type        = string
 }
