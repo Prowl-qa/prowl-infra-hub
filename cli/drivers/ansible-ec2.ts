@@ -179,9 +179,9 @@ platforms:
     instance_tags:
       prowl-test: "true"
       Project: ${EC2_TEST_PROJECT_TAG}
+      RunId: ${testRunId}
       managed-by: molecule
       environment: ${options.envProfile}
-      prowl-test-run: ${testRunId}
 provisioner:
   name: ansible
   connection_options:
@@ -211,7 +211,7 @@ export function getTerminateTaggedEc2InstancesFallbackCommand(
   region: string,
   testRunId: string
 ): string {
-  return `INSTANCE_IDS=$(aws ec2 describe-instances --filters "Name=tag:prowl-test,Values=true" "Name=tag:Project,Values=${EC2_TEST_PROJECT_TAG}" "Name=tag:environment,Values=${envProfile}" "Name=tag:prowl-test-run,Values=${testRunId}" "Name=instance-state-name,Values=running,pending" --query "Reservations[].Instances[].InstanceId" --output text --region ${region})
+  return `INSTANCE_IDS=$(aws ec2 describe-instances --filters "Name=tag:prowl-test,Values=true" "Name=tag:Project,Values=${EC2_TEST_PROJECT_TAG}" "Name=tag:environment,Values=${envProfile}" "Name=tag:RunId,Values=${testRunId}" "Name=instance-state-name,Values=running,pending" --query "Reservations[].Instances[].InstanceId" --output text --region ${region})
 if [ -n "$INSTANCE_IDS" ] && [ "$INSTANCE_IDS" != "None" ]; then
   aws ec2 terminate-instances --instance-ids $INSTANCE_IDS --region ${region}
 fi`;
@@ -253,12 +253,15 @@ export async function runEc2AnsibleTest(options: Ec2TestOptions): Promise<Ansibl
     };
   }
 
-  const absolutePlaybook = path.resolve(options.playbookPath);
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prowl-ec2-test-'));
-  const testRunId = randomUUID();
+  let tmpDir: string | undefined;
+  let testRunId: string | undefined;
 
   try {
     try {
+      const absolutePlaybook = path.resolve(options.playbookPath);
+      tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prowl-ec2-test-'));
+      testRunId = process.env.PROWL_EC2_RUN_ID?.trim() || randomUUID();
+
       // Extract the playbook block from the YAML template
       const content = await fs.readFile(absolutePlaybook, 'utf8');
       const playbookMatch = extractPlaybookBlock(content);
@@ -337,26 +340,30 @@ export async function runEc2AnsibleTest(options: Ec2TestOptions): Promise<Ansibl
       };
     }
   } finally {
-    // Destroy the EC2 instance via Molecule
-    try {
-      execSync('molecule destroy', {
-        cwd: tmpDir,
-        maxBuffer: MOLECULE_MAX_BUFFER,
-        stdio: 'pipe',
-        timeout: 120_000,
-      });
-    } catch {
-      // Fallback: terminate any tagged instances directly
+    if (tmpDir) {
+      // Destroy the EC2 instance via Molecule
       try {
-        execSync(getTerminateTaggedEc2InstancesFallbackCommand(options.envProfile, region, testRunId), {
+        execSync('molecule destroy', {
+          cwd: tmpDir,
+          maxBuffer: MOLECULE_MAX_BUFFER,
           stdio: 'pipe',
-          timeout: 30_000,
+          timeout: 120_000,
         });
       } catch {
-        console.error(`  WARNING: Failed to clean up EC2 instance for ${options.envProfile}. Check AWS console.`);
+        // Fallback: terminate any tagged instances directly
+        if (testRunId) {
+          try {
+            execSync(getTerminateTaggedEc2InstancesFallbackCommand(options.envProfile, region, testRunId), {
+              stdio: 'pipe',
+              timeout: 30_000,
+            });
+          } catch {
+            console.error(`  WARNING: Failed to clean up EC2 instance for ${options.envProfile}. Check AWS console.`);
+          }
+        }
       }
+      await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
     }
-    await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
   }
 }
 

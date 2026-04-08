@@ -108,9 +108,15 @@ data "aws_iam_policy_document" "molecule_ec2" {
     }
 
     condition {
+      test     = "StringEquals"
+      variable = "ec2:CreateAction"
+      values   = ["RunInstances"]
+    }
+
+    condition {
       test     = "ForAllValues:StringEquals"
       variable = "aws:TagKeys"
-      values   = ["Project", "environment", "managed-by", "prowl-test", "prowl-test-run"]
+      values   = ["Project", "RunId", "environment", "managed-by", "prowl-test"]
     }
   }
 
