@@ -19,7 +19,7 @@ variable "github_repo" {
 variable "github_ref" {
   description = "Git ref allowed to assume the GitHub Actions OIDC role"
   type        = string
-  default     = "refs/heads/test-run"
+  default     = "refs/heads/main"
 }
 
 variable "allowed_instance_types" {

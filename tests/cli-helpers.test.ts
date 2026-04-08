@@ -126,7 +126,7 @@ test('getTerminateTaggedEc2InstancesFallbackCommand keeps instance ids attached 
 
   assert.match(command, /Name=tag:environment,Values=ubuntu-2204/);
   assert.match(command, /Name=tag:Project,Values=ec2-test-env/);
-  assert.match(command, /Name=tag:prowl-test-run,Values=run-123/);
+  assert.match(command, /Name=tag:RunId,Values=run-123/);
   assert.match(command, /aws ec2 terminate-instances --instance-ids \$INSTANCE_IDS --region us-east-1/);
   assert.doesNotMatch(command, /aws ec2 terminate-instances --instance-ids --region us-east-1/);
   assert.doesNotMatch(command, /xargs/);
