@@ -8,6 +8,15 @@ export interface TestReport {
   passed: boolean;
   date: string;
   duration_ms: number;
+  driver: 'docker' | 'ec2';
+  testMode: 'check' | 'full';
+  environment?: {
+    profile: string;
+    instanceType: string;
+    python: string;
+    mac: string;
+    label: string;
+  };
   error?: string;
 }
 

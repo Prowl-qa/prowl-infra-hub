@@ -37,3 +37,9 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+crash.log
