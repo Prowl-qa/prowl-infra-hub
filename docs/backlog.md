@@ -56,24 +56,6 @@
 {PQIH-014} **INFRA-014: Playbook detail page**
     Create `/browse/[category]/[name]` route showing full YAML, metadata, test results, compatibility matrix, and related playbooks from the same category.
 
-## Completed
+---
 
-### INFRA-020: Remove duplicate `core` declaration from PR comment workflow (completed: 2026-03-26)
-**Description**: Removed the duplicate `core` declaration from `.github/workflows/test-playbook.yml` so the `actions/github-script` PR comment step uses the built-in `core` binding instead of failing with a syntax error before execution. Preserved the 403 warning fallback for restricted-token runs and verified `eslint`, `npm run typecheck`, and the Node test suite all pass.
-
-### INFRA-019: Make PR test result comments best-effort in CI (completed: 2026-03-25)
-**Description**: Updated `.github/workflows/test-playbook.yml` to request the minimum PR comment permissions needed for workflow reporting and to downgrade a 403 `Resource not accessible by integration` response to a warning so restricted-token runs do not fail the entire job. Verified `eslint`, `npm run typecheck`, and the Node test suite all pass.
-
-### INFRA-018: Restore client IP fallback and migrate JSONB GIN indexes (completed: 2026-03-25)
-**Description**: Restored `x-forwarded-for` as a post-`x-real-ip` fallback for per-client rate limiting, added warning logs when DB-backed search falls back to in-memory filtering, and moved the `tags`/`compliance_tags` GIN indexes into Drizzle schema and migration artifacts while removing seed-time index creation. Added focused request-IP tests and verified lint, typecheck, and the Node test suite all pass.
-
-### INFRA-017: Fix import rename handling and test metadata edge cases (completed: 2026-03-25)
-**Description**: Changed the import and seed upserts to target `filePath` so same-file slug renames update cleanly, made the Ansible CLI extract the real `tasks:` block by indentation instead of assuming exactly two leading spaces, and updated YAML metadata writes to deduplicate `tested_on` entries by exact `os` + `arch`. Added focused CLI helper tests for task extraction and metadata updates, and verified the repo lint, typecheck, and Node test suite all pass.
-
-### INFRA-016: Resolve workflow, rate-limit, and search review findings (completed: 2026-03-25)
-**Description**: Fixed the `test-playbook.yml` regex so `patching/` and `ci-cd/` playbooks are matched correctly, moved workflow here-string inputs into environment variables to avoid GitHub Actions expression injection, changed the Upstash rate-limit fallback to retry shared enforcement after a cooldown, and migrated full-text search to a generated `search_vector` column with a GIN-backed query path. Also updated the Node test harness imports so the repository test command runs successfully under `node --experimental-strip-types`.
-
-### INFRA-015: Allow conventional `.env.example` infra scaffolding in CI (completed: 2026-03-25)
-**Description**: Updated `.github/workflows/validate-submission.yml` to allow the conventional `.env.example` filename used by `infrastructure/prowl-hub-postgres/.env.example`, while continuing to block real `.env` files. Verified the tracked-file allowlist returns no unexpected file types after the change.
-
-INFRA-001 through INFRA-006 resolved on 2026-03-24. See [resolved.md](resolved.md) under Prowl Infra Hub.
+Completed items live in [resolved.md](resolved.md).
