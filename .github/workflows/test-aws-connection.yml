@@ -35,9 +35,22 @@ jobs:
           trap 'rm -f /tmp/test-key.pem' EXIT
           printf '%s' "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > /tmp/test-key.pem
           chmod 600 /tmp/test-key.pem
-          if ssh-keygen -l -f /tmp/test-key.pem >/dev/null 2>&1; then
+
+          echo "=== Diagnostic (no key body) ==="
+          echo "Bytes:       $(wc -c < /tmp/test-key.pem)"
+          echo "Lines:       $(wc -l < /tmp/test-key.pem)"
+          echo "First line:  $(head -1 /tmp/test-key.pem)"
+          echo "Last line:   $(tail -1 /tmp/test-key.pem)"
+          echo "Last 8 bytes (hex):"
+          tail -c 8 /tmp/test-key.pem | xxd
+          echo "file(1):     $(file /tmp/test-key.pem)"
+          echo "==============================="
+
+          if ssh-keygen -l -f /tmp/test-key.pem; then
             echo "SSH key is valid"
           else
+            ec=$?
+            echo "ssh-keygen exited with status $ec" >&2
             echo "SSH key is INVALID" >&2
             exit 1
           fi
