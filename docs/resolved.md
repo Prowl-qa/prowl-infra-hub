@@ -63,3 +63,7 @@
 ## ~~INFRA-024: EC2 test CI workflow (weekly + manual dispatch)~~
 **Resolved**: 2026-04-02 (commit 68058cd, scoped cleanup in b930569 and a469516)
 **Description**: Added `.github/workflows/test-playbook-ec2.yml` with `workflow_dispatch` (optional `playbook_path` and `environment` inputs) plus a weekly cron (Monday 03:00 UTC). A `determine-matrix` job builds the env list, a `test` job runs Molecule against each environment in a fail-fast=false matrix using OIDC via `aws-actions/configure-aws-credentials@v4`, a `cleanup` job terminates leaked instances scoped to the current `RunId` + `Project=ec2-test-env`, and a `summary` job aggregates JSON reports into a Markdown step summary. Reports uploaded as per-env artifacts.
+
+## ~~INFRA-028: Stop printing private key content-derived data~~
+**Resolved**: 2026-05-08 (commit 04c4f07)
+**Description**: Removed SSH private key body diagnostics from `.github/workflows/test-aws-connection.yml`, including first-line, last-line, raw byte, file-type, and fingerprint output. The workflow now performs quiet validation, fails early for an empty secret or literal escaped newline sequences, and only prints non-sensitive success/failure messages.
