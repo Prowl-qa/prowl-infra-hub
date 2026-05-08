@@ -36,21 +36,19 @@ jobs:
           printf '%s' "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > /tmp/test-key.pem
           chmod 600 /tmp/test-key.pem
 
-          echo "=== Diagnostic (no key body) ==="
-          echo "Bytes:       $(wc -c < /tmp/test-key.pem)"
-          echo "Lines:       $(wc -l < /tmp/test-key.pem)"
-          echo "First line:  $(head -1 /tmp/test-key.pem)"
-          echo "Last line:   $(tail -1 /tmp/test-key.pem)"
-          echo "Last 8 bytes (hex):"
-          tail -c 8 /tmp/test-key.pem | xxd
-          echo "file(1):     $(file /tmp/test-key.pem)"
-          echo "==============================="
+          if [ ! -s /tmp/test-key.pem ]; then
+            echo "SSH key secret is empty" >&2
+            exit 1
+          fi
 
-          if ssh-keygen -l -f /tmp/test-key.pem; then
+          if grep -q '\\n' /tmp/test-key.pem; then
+            echo "SSH key secret contains escaped newline sequences; store it as a multiline private key" >&2
+            exit 1
+          fi
+
+          if ssh-keygen -y -f /tmp/test-key.pem >/dev/null 2>&1; then
             echo "SSH key is valid"
           else
-            ec=$?
-            echo "ssh-keygen exited with status $ec" >&2
             echo "SSH key is INVALID" >&2
             exit 1
           fi
