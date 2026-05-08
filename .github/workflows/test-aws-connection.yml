@@ -35,7 +35,18 @@ jobs:
           trap 'rm -f /tmp/test-key.pem' EXIT
           printf '%s' "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > /tmp/test-key.pem
           chmod 600 /tmp/test-key.pem
-          if ssh-keygen -l -f /tmp/test-key.pem >/dev/null 2>&1; then
+
+          if [ ! -s /tmp/test-key.pem ]; then
+            echo "SSH key secret is empty" >&2
+            exit 1
+          fi
+
+          if grep -q '\\n' /tmp/test-key.pem; then
+            echo "SSH key secret contains escaped newline sequences; store it as a multiline private key" >&2
+            exit 1
+          fi
+
+          if ssh-keygen -y -f /tmp/test-key.pem >/dev/null 2>&1; then
             echo "SSH key is valid"
           else
             echo "SSH key is INVALID" >&2
