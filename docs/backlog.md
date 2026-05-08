@@ -2,7 +2,7 @@
 
 **Repo**: `Prowl-qa/prowl-infra-hub`
 **Local path**: `~/Desktop/Current Projects/Prowl QA/Repositories/prowl-infra-hub`
-**Branch**: `test-run`
+**Main branch**: `main`
 **Stack**: Next.js + YAML playbook templates + PostgreSQL + Drizzle ORM + GitHub Actions CI
 **License**: Apache 2.0
 
@@ -13,25 +13,11 @@
 {PQIH-001} **INFRA-026: AWS account setup and GitHub connection (manual prerequisite)**
    Manual steps before any EC2 testing code can work. Create AWS account (free tier), enable MFA, install AWS CLI (`brew install awscli`) and Terraform (`brew install terraform`) locally. After INFRA-021 Terraform is applied: copy outputs into GitHub repo Secrets (`AWS_ROLE_ARN`, `EC2_SSH_PRIVATE_KEY`, `EC2_SUBNET_ID`, `EC2_SECURITY_GROUP_ID`, `EC2_KEY_PAIR_NAME`). Verify OIDC connection by manually triggering the EC2 workflow. This is a one-time setup — no code changes, just account/config work.
 
-{PQIH-002} **INFRA-021: AWS infrastructure bootstrap for EC2 testing**
-   One-time Terraform setup for Molecule EC2 driver. Create VPC/subnet (or use default VPC), security group allowing SSH, IAM role with GitHub Actions OIDC trust policy scoped to `t3.micro`, `t3.small`, and `t3.medium` spot instances. SSH key pair generation. Files: `infra/ec2-test-env/{main,variables,outputs}.tf`. Cost controls: IAM restricts instance types, budget alert at $10/month. Depends on INFRA-026.
-
-{PQIH-003} **INFRA-022: EC2 Molecule driver with enterprise environment profiles**
-   New `cli/drivers/ansible-ec2.ts` that generates Molecule EC2 config instead of Docker. Defines 6 environment profiles matching documented enterprise deployments: `rhel8-legacy` (Rocky 8, Python 3.6, SELinux), `rhel9-current` (Rocky 9, Python 3.9, SELinux), `ubuntu-2204` (Python 3.10, AppArmor), `ubuntu-2404` (Python 3.12, AppArmor), `al2023` (Python 3.9, SELinux), `debian-12` (Python 3.11, AppArmor). Each profile specifies AMI, instance type (default t3.small), SSH user, Python version, and MAC posture. Spot instances with price cap. Full execution (no check mode). 10-minute timeout. Fallback instance termination via AWS CLI if Molecule cleanup fails.
-
-{PQIH-004} **INFRA-023: CLI `--driver` flag, `--env` flag, and report enhancements**
-   Add `--driver <docker|ec2>` and `--env <profile>` flags to `cli/index.ts` (default env: `rhel9-current`). `--env all` runs against all 6 profiles. `--instance-type` overrides the profile default. Validate required EC2 env vars when ec2 driver selected. Extend `TestReport` with `driver`, `testMode`, and `environment` object (profile name, instance type, Python version, MAC posture, label). Add `test:playbook:ec2` npm scripts. Update metadata and DB schema to store full environment details per test result.
-
-{PQIH-005} **INFRA-024: EC2 test CI workflow (weekly + manual dispatch)**
-   New `.github/workflows/test-playbook-ec2.yml`. Triggers: `workflow_dispatch` with optional playbook/env inputs, weekly cron (Monday 3 AM UTC). Matrix strategy across all 6 environment profiles (`rhel8-legacy`, `rhel9-current`, `ubuntu-2204`, `ubuntu-2404`, `al2023`, `debian-12`). OIDC auth via `aws-actions/configure-aws-credentials@v4`. Safety: cleanup job terminates any `prowl-test=true` tagged instances older than 30 min. Upload test reports as artifacts. Update existing `test-playbook.yml` PR comment to show Mode column.
-
 {PQIH-006} **INFRA-025: EC2 testing documentation**
    New `docs/ec2-testing.md` covering: AWS account creation walkthrough, Terraform setup steps, GitHub Secrets configuration checklist, CLI usage with `--driver ec2` and `--env`, environment profile reference (what each simulates and why — based on enterprise deployment research), cost expectations (~$0.60/full matrix run across 6 environments, ~$2.50/month at weekly, $0 during AWS free tier for t3.micro), troubleshooting (leaked instances, SSH timeouts, spot capacity), and how to add custom environment profiles.
 
-## Medium Priority
-
-{PQIH-007} **INFRA-007: OS + version compatibility matrix**
-   Extend test CLI to support `--os` flag for targeting specific OS versions (Ubuntu 22.04, RHEL 9, Amazon Linux 2023, Debian 12). Store results per OS in the compatibility matrix. Display matrix on playbook detail page.
+{PQIH-015} **INFRA-027: Package and publish the `prowl-infra` CLI**
+   Make the test CLI installable as a standalone binary so external users can run `prowl-infra test ...` instead of `npx tsx cli/index.ts`. Add a `bin` entry to `package.json` mapping `prowl-infra` to a compiled entry point, set up a build step (esbuild or `tsc` with bundling) that emits Node-compatible output for the `cli/` tree, ensure the published artifact only contains `cli/`, `dist/`, `LICENSE`, and `README` (exclude `app/`, `components/`, `lib/`, `infra/`, playbook directories, etc. via `files` allowlist), wire `npm run build:cli` and verify `npm pack` produces a clean tarball. Decide on package name (`@prowl-qa/infra-cli` vs. `prowl-infra`) and publish target (npm public registry) alongside the Prowl QA CLI release. Update README install instructions.
 
 ## Low Priority / Post-Release
 
@@ -53,8 +39,8 @@
 {PQIH-013} **INFRA-013: Sort options on browse page**
     Add sort controls (newest, alphabetical, most tasks, risk level). Default to alphabetical.
 
-{PQIH-014} **INFRA-014: Playbook detail page**
-    Create `/browse/[category]/[name]` route showing full YAML, metadata, test results, compatibility matrix, and related playbooks from the same category.
+{PQIH-014} **INFRA-014: Playbook detail page with OS compatibility matrix**
+    Create `/browse/[category]/[name]` route showing full YAML, metadata, test results, related playbooks from the same category, and a per-OS compatibility matrix sourced from the `tested_on` jsonb column (Ubuntu 22.04, RHEL 9, Amazon Linux 2023, Debian 12, etc.). The CLI already records per-OS results via the `--os` flag; this item covers surfacing them in the UI. (Merged from former PQIH-007 / INFRA-007.)
 
 ---
 

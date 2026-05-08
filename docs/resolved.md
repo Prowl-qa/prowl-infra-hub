@@ -47,3 +47,19 @@
 ### ~~INFRA-020: Remove duplicate `core` declaration from PR comment workflow~~
 **Resolved**: 2026-03-26 (commit 5a2874d)
 **Description**: Removed the duplicate `core` declaration from `.github/workflows/test-playbook.yml` so the `actions/github-script` PR comment step uses the built-in `core` binding instead of failing with a syntax error before execution. Preserved the 403 warning fallback for restricted-token runs and verified `eslint`, `npm run typecheck`, and the Node test suite all pass.
+
+### ~~INFRA-021: AWS infrastructure bootstrap for EC2 testing~~
+**Resolved**: 2026-04-02 (commit 151c61d, hardened in 1885400 and a469516)
+**Description**: Added `infra/ec2-test-env/{main,variables,outputs}.tf` defining an isolated test VPC + subnet + IGW, a security group for SSH ingress, an EC2 key pair, and a GitHub Actions OIDC provider plus IAM role scoped to the repo. The IAM policy restricts `ec2:RunInstances` to the allowed instance types and denies non-spot launches, and limits `ec2:TerminateInstances` / `ec2:CreateTags` to instances tagged with `Project=ec2-test-env`. Provider versions locked via `.terraform.lock.hcl`.
+
+### ~~INFRA-022: EC2 Molecule driver with enterprise environment profiles~~
+**Resolved**: 2026-04-02 (commit 2676da8, with SSH preflight and cleanup fix in 01ba345)
+**Description**: Added `cli/drivers/ansible-ec2.ts` that generates a Molecule EC2 config and runs full execution (no `--check` mode) against six enterprise environment profiles: `rhel8-legacy` (Rocky 8 / Python 3.6 / SELinux), `rhel9-current` (Rocky 9 / Python 3.9 / SELinux), `ubuntu-2204` (Python 3.10 / AppArmor), `ubuntu-2404` (Python 3.12 / AppArmor), `al2023` (Python 3.9 / SELinux), and `debian-12` (Python 3.11 / AppArmor). Each profile resolves its AMI via SSM with a `describe-images` fallback, launches t3.small spot instances with a price cap, tags instances with `prowl-test=true` + `Project=ec2-test-env` + `RunId`, and falls back to direct `aws ec2 terminate-instances` if Molecule cleanup fails. 10-minute Molecule timeout.
+
+### ~~INFRA-023: CLI `--driver` flag, `--env` flag, and report enhancements~~
+**Resolved**: 2026-04-02 (commit 2676da8)
+**Description**: Added `--driver <docker|ec2>`, `--env <profile|all>`, `--instance-type`, and `--environments` flags to `cli/index.ts` (default env: `rhel9-current`). EC2 driver validates the required env vars (`EC2_SUBNET_ID`, `EC2_SECURITY_GROUP_ID`, `EC2_KEY_PAIR_NAME`, `EC2_SSH_PRIVATE_KEY` or `EC2_SSH_PRIVATE_KEY_PATH`) and writes the inline private key to a 0600 temp file when provided. Extended `TestReport` with `driver`, `testMode`, and an `environment` block (profile name, instance type, Python version, MAC posture, label). Added `test:playbook:ec2` and `test:playbook:ec2:all` npm scripts.
+
+### ~~INFRA-024: EC2 test CI workflow (weekly + manual dispatch)~~
+**Resolved**: 2026-04-02 (commit 68058cd, scoped cleanup in b930569 and a469516)
+**Description**: Added `.github/workflows/test-playbook-ec2.yml` with `workflow_dispatch` (optional `playbook_path` and `environment` inputs) plus a weekly cron (Monday 03:00 UTC). A `determine-matrix` job builds the env list, a `test` job runs Molecule against each environment in a fail-fast=false matrix using OIDC via `aws-actions/configure-aws-credentials@v4`, a `cleanup` job terminates leaked instances scoped to the current `RunId` + `Project=ec2-test-env`, and a `summary` job aggregates JSON reports into a Markdown step summary. Reports uploaded as per-env artifacts.
