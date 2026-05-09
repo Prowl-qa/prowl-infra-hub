@@ -33,7 +33,10 @@ jobs:
       - name: Verify SSH key format
         run: |
           trap 'rm -f /tmp/test-key.pem' EXIT
-          printf '%s' "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > /tmp/test-key.pem
+          # printf '%s\n' guarantees a trailing newline; GitHub Actions strips
+          # trailing newlines from secrets when expanded via ${{ }}, and OpenSSH
+          # rejects PEM files that don't end in a newline.
+          printf '%s\n' "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > /tmp/test-key.pem
           chmod 600 /tmp/test-key.pem
 
           if [ ! -s /tmp/test-key.pem ]; then
@@ -46,7 +49,7 @@ jobs:
             exit 1
           fi
 
-          if ssh-keygen -y -f /tmp/test-key.pem >/dev/null 2>&1; then
+          if ssh-keygen -y -f /tmp/test-key.pem > /dev/null; then
             echo "SSH key is valid"
           else
             echo "SSH key is INVALID" >&2
