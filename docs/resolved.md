@@ -71,3 +71,7 @@
 ## ~~INFRA-029: Validate SSH key secret before file creation~~
 **Resolved**: 2026-05-09 (commit e3c825c)
 **Description**: Updated `.github/workflows/test-aws-connection.yml` so the EC2 SSH private key secret is checked before writing `/tmp/test-key.pem`. Empty secrets now fail before `printf '%s\n'` can create a newline-only key file, while valid multiline secrets are still written with the trailing newline OpenSSH expects.
+
+## ~~INFRA-026: AWS account setup and GitHub connection (manual prerequisite)~~
+**Resolved**: 2026-05-09 (workflow run 25609469669)
+**Description**: Verified end-to-end that the manual AWS bootstrap from INFRA-021 is complete and functional. AWS account `AWS_ACCOUNT_ID` is active with Terraform-managed VPC, subnet, IGW, security group, key pair, OIDC provider, and IAM role. All five GitHub Secrets (`AWS_ROLE_ARN`, `EC2_SUBNET_ID`, `EC2_SECURITY_GROUP_ID`, `EC2_KEY_PAIR_NAME`, `EC2_SSH_PRIVATE_KEY`) are populated. The `test-aws-connection.yml` smoke test now passes on `main`: OIDC role assumption succeeds, `aws sts get-caller-identity` resolves, `describe-subnets`/`describe-security-groups`/`describe-key-pairs` all return the expected resources, and `ssh-keygen -y -f` validates the SSH key. Diagnosis along the way uncovered that `${{ secrets.X }}` substitution strips trailing newlines and that OpenSSH 9.x rejects newline-less PEM files, fixed by switching the workflow to `printf '%s\n'` with the secret routed via an `env:` block.
