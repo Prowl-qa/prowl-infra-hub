@@ -31,18 +31,21 @@ jobs:
           aws ec2 describe-key-pairs --key-names "${{ secrets.EC2_KEY_PAIR_NAME }}" --query 'KeyPairs[0].KeyName' --output text
 
       - name: Verify SSH key format
+        env:
+          EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
         run: |
           trap 'rm -f /tmp/test-key.pem' EXIT
-          # printf '%s\n' guarantees a trailing newline; GitHub Actions strips
-          # trailing newlines from secrets when expanded via ${{ }}, and OpenSSH
-          # rejects PEM files that don't end in a newline.
-          printf '%s\n' "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > /tmp/test-key.pem
-          chmod 600 /tmp/test-key.pem
 
-          if [ ! -s /tmp/test-key.pem ]; then
+          if [ -z "$EC2_SSH_PRIVATE_KEY" ]; then
             echo "SSH key secret is empty" >&2
             exit 1
           fi
+
+          # printf '%s\n' guarantees a trailing newline; GitHub Actions strips
+          # trailing newlines from secrets when expanded via ${{ }}, and OpenSSH
+          # rejects PEM files that don't end in a newline.
+          printf '%s\n' "$EC2_SSH_PRIVATE_KEY" > /tmp/test-key.pem
+          chmod 600 /tmp/test-key.pem
 
           if grep -q '\\n' /tmp/test-key.pem; then
             echo "SSH key secret contains escaped newline sequences; store it as a multiline private key" >&2
