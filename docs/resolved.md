@@ -67,3 +67,7 @@
 ## ~~INFRA-028: Stop printing private key content-derived data~~
 **Resolved**: 2026-05-08 (commit 04c4f07)
 **Description**: Removed SSH private key body diagnostics from `.github/workflows/test-aws-connection.yml`, including first-line, last-line, raw byte, file-type, and fingerprint output. The workflow now performs quiet validation, fails early for an empty secret or literal escaped newline sequences, and only prints non-sensitive success/failure messages.
+
+## ~~INFRA-029: Validate SSH key secret before file creation~~
+**Resolved**: 2026-05-09 (commit e3c825c)
+**Description**: Updated `.github/workflows/test-aws-connection.yml` so the EC2 SSH private key secret is checked before writing `/tmp/test-key.pem`. Empty secrets now fail before `printf '%s\n'` can create a newline-only key file, while valid multiline secrets are still written with the trailing newline OpenSSH expects.
