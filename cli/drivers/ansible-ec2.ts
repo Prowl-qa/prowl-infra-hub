@@ -330,13 +330,20 @@ export async function runEc2AnsibleTest(options: Ec2TestOptions): Promise<Ansibl
       const error = err as { stderr?: Buffer; stdout?: Buffer };
       const stderr = error.stderr?.toString() || '';
       const stdout = error.stdout?.toString() || '';
+      // Molecule writes useful diagnostics to both streams; merge them so we
+      // don't drop half the picture when both are populated.
+      const combined = [stderr, stdout].filter(Boolean).join('\n--- molecule stdout ---\n')
+        || 'Molecule EC2 test failed';
+      // Echo to the CI log so failures are visible without downloading the
+      // JSON report artifact. Truncate generously to avoid runaway logs.
+      console.error(combined.slice(0, 10_000));
       return {
         passed: false,
         os: profile.os,
         arch: 'x86_64',
         duration_ms: Date.now() - start,
         driver: 'ec2',
-        error: (stderr || stdout || 'Molecule EC2 test failed').slice(0, 2000),
+        error: combined.slice(0, 10_000),
       };
     }
   } finally {
