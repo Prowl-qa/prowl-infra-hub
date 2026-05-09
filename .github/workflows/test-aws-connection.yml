@@ -42,7 +42,7 @@ jobs:
           fi
 
           # printf '%s\n' guarantees a trailing newline; GitHub Actions strips
-          # trailing newlines from secrets when expanded via ${{ }}, and OpenSSH
+          # trailing newlines from secrets when expanded via Actions expressions, and OpenSSH
           # rejects PEM files that don't end in a newline.
           printf '%s\n' "$EC2_SSH_PRIVATE_KEY" > /tmp/test-key.pem
           chmod 600 /tmp/test-key.pem
