@@ -19,6 +19,9 @@
 {PQIH-015} **INFRA-027: Package and publish the `prowl-infra` CLI**
    Make the test CLI installable as a standalone binary so external users can run `prowl-infra test ...` instead of `npx tsx cli/index.ts`. Add a `bin` entry to `package.json` mapping `prowl-infra` to a compiled entry point, set up a build step (esbuild or `tsc` with bundling) that emits Node-compatible output for the `cli/` tree, ensure the published artifact only contains `cli/`, `dist/`, `LICENSE`, and `README` (exclude `app/`, `components/`, `lib/`, `infra/`, playbook directories, etc. via `files` allowlist), wire `npm run build:cli` and verify `npm pack` produces a clean tarball. Decide on package name (`@prowl-qa/infra-cli` vs. `prowl-infra`) and publish target (npm public registry) alongside the Prowl QA CLI release. Update README install instructions.
 
+{PQIH-016} **INFRA-028: Diagnose and fix Molecule EC2 driver failure in CI**
+   The weekly `test-playbook-ec2.yml` workflow has been failing in ~1.7 seconds per playbook for 4+ consecutive weeks (2026-04-13 through 2026-05-04), with no EC2 instances actually launching. Errors are uniform across all 6 environment profiles. Captured stderr is truncated by `cli/drivers/ansible-ec2.ts:339` (slices to 2000 chars) and shows only `WARNING Driver ec2 does not provide a schema. INFO [default > discovery] scenario test matrix: dependency, create, prepare, converge`. Likely causes: (a) `molecule-plugins[ec2]` no longer ships a working EC2 driver in the floating version pin, (b) missing `boto3`/`botocore` Galaxy collections needed by the driver's `create.yml`, or (c) Ansible collection version mismatch. Fix steps: bump the truncation limit to ~10000 chars on a one-off branch + dispatch a single-env run to capture the real stack trace; pin Molecule, `molecule-plugins[ec2]`, `ansible-core`, and `boto3` to known-working versions in `test-playbook-ec2.yml`; add the `amazon.aws`/`community.aws` Ansible Galaxy collections explicitly. Real release blocker — without this, EC2 testing is non-functional.
+
 ## Low Priority / Post-Release
 
 {PQIH-008} **INFRA-008: Prowl Infra Test CLI — Terraform driver**
@@ -41,6 +44,9 @@
 
 {PQIH-014} **INFRA-014: Playbook detail page with OS compatibility matrix**
     Create `/browse/[category]/[name]` route showing full YAML, metadata, test results, related playbooks from the same category, and a per-OS compatibility matrix sourced from the `tested_on` jsonb column (Ubuntu 22.04, RHEL 9, Amazon Linux 2023, Debian 12, etc.). The CLI already records per-OS results via the `--os` flag; this item covers surfacing them in the UI. (Merged from former PQIH-007 / INFRA-007.)
+
+{PQIH-017} **INFRA-029: Add `actionlint` and `shellcheck` to local + CI tooling**
+    Install `actionlint` and `shellcheck` (via `brew install actionlint shellcheck` for local dev) and wire them into a CI step that runs on PRs touching `.github/workflows/**`. Catches GitHub Actions expression errors, missing `permissions:` blocks, shell quoting issues in `run:` blocks, and common bash bugs (unquoted variables, missing exit-code checks). Discovered while debugging the `EC2_SSH_PRIVATE_KEY` trailing-newline issue in `test-aws-connection.yml` — neither tool was available to validate the workflow YAML before dispatch, so the bug had to be diagnosed via several round-trip CI runs. Add a `.github/workflows/lint-workflows.yml` job and document the local install in CONTRIBUTING.md.
 
 ---
 
