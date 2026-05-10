@@ -11,11 +11,13 @@ test('redactOutput masks common secret patterns from Molecule output', () => {
   const privateKeyBegin = ['-----BEGIN OPENSSH ', 'PRIVATE KEY-----'].join('');
   const privateKeyBody = ['b3BlbnNzaC1rZXkt', 'djEAAAAABG5vbmUAAAA='].join('');
   const privateKeyEnd = ['-----END OPENSSH ', 'PRIVATE KEY-----'].join('');
+  const quotedPassword = ['hunt', 'er 2'].join('');
 
   const output = [
     `aws_access_key_id=${awsAccessKeyId}`,
     `aws_secret_access_key=${awsSecretAccessKey}`,
     `password: ${password}`,
+    `password: "${quotedPassword}"`,
     `Authorization: Bearer ${bearerToken}`,
     privateKeyBegin,
     privateKeyBody,
@@ -27,11 +29,12 @@ test('redactOutput masks common secret patterns from Molecule output', () => {
   assert.equal(redacted.includes(awsAccessKeyId), false);
   assert.equal(redacted.includes(awsSecretAccessKey), false);
   assert.equal(redacted.includes(password), false);
+  assert.equal(redacted.includes(quotedPassword), false);
   assert.equal(redacted.includes(bearerToken), false);
   assert.equal(redacted.includes(privateKeyBody), false);
   assert.match(redacted, /\[REDACTED_AWS_ACCESS_KEY_ID\]/);
   assert.match(redacted, /aws_secret_access_key=\[REDACTED\]/);
-  assert.match(redacted, /password: \[REDACTED\]/);
+  assert.equal(redacted.match(/password: \[REDACTED\]/g)?.length, 2);
   assert.match(redacted, /Authorization: Bearer \[REDACTED\]/);
   assert.match(redacted, /\[REDACTED_PRIVATE_KEY\]/);
 });

@@ -13,9 +13,6 @@
     "esModuleInterop": true,
     "module": "ESNext",
     "moduleResolution": "node",
-    "types": [
-      "node"
-    ],
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
