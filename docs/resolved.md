@@ -79,3 +79,7 @@
 ## ~~INFRA-032: Redact Molecule EC2 failure output~~
 **Resolved**: 2026-05-10 (commit ea3ea18)
 **Description**: Updated `cli/drivers/ansible-ec2.ts` so Molecule EC2 failure output is redacted before it is echoed to CI logs or returned in the JSON result error field. Added coverage for common AWS keys, token/password fields, authorization headers, and private key blocks while preserving the existing 10,000-character failure summary limit.
+
+## ~~INFRA-033: Avoid secret-shaped redaction test literals~~
+**Resolved**: 2026-05-10 (commit 0e97abc)
+**Description**: Updated `tests/ansible-ec2.test.ts` so redaction fixtures are assembled from safe fragments at runtime. The test still exercises the same AWS key, token/password, authorization header, and private key patterns without storing full secret-shaped values as single source literals.
