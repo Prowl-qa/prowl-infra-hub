@@ -83,3 +83,7 @@
 ## ~~INFRA-033: Avoid secret-shaped redaction test literals~~
 **Resolved**: 2026-05-10 (commit 0e97abc)
 **Description**: Updated `tests/ansible-ec2.test.ts` so redaction fixtures are assembled from safe fragments at runtime. The test still exercises the same AWS key, token/password, authorization header, and private key patterns without storing full secret-shaped values as single source literals.
+
+## ~~INFRA-034: Enable Node type resolution for test imports~~
+**Resolved**: 2026-05-10 (commit 8c0ca82)
+**Description**: Updated `tsconfig.json` to use Node module resolution and explicit Node ambient types so TypeScript recognizes built-in imports such as `node:assert/strict` and `node:test` in the Node test suite.
