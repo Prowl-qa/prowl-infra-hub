@@ -87,3 +87,7 @@
 ## ~~INFRA-034: Enable Node type resolution for test imports~~
 **Resolved**: 2026-05-10 (commit 8c0ca82)
 **Description**: Updated `tsconfig.json` to use Node module resolution and explicit Node ambient types so TypeScript recognizes built-in imports such as `node:assert/strict` and `node:test` in the Node test suite.
+
+## ~~INFRA-035: Tighten Molecule redaction and test typing config~~
+**Resolved**: 2026-05-10 (commit a3f769b)
+**Description**: Updated Molecule EC2 output redaction so quoted key/value secrets with embedded whitespace are fully masked before reaching CI logs or JSON error output. Moved explicit Node ambient types out of the base `tsconfig.json` into `tsconfig.test.json` and wired `npm run typecheck` to validate the Node test suite with that test-specific config.
