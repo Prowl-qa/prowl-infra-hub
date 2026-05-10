@@ -8,6 +8,7 @@ import { extractAnsibleTasksForInclude, type AnsibleTestResult } from './ansible
 
 const EC2_TEST_PROJECT_TAG = 'ec2-test-env';
 const MOLECULE_MAX_BUFFER = 10 * 1024 * 1024;
+const MOLECULE_ERROR_LOG_LIMIT = 10_000;
 
 // ---------------------------------------------------------------------------
 // Environment profiles — full OS + Python + security configurations matching
@@ -114,6 +115,20 @@ export interface Ec2TestOptions {
 
 export function extractPlaybookBlock(content: string): string | null {
   return content.match(/^playbook:\s*\|\r?\n([\s\S]*?)(?=^[^ \t\r\n][^:\r\n]*:(?:\s|$)|$(?![\s\S]))/m)?.[1] ?? null;
+}
+
+export function redactOutput(output: string): string {
+  return output
+    .replace(/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/g, '[REDACTED_PRIVATE_KEY]')
+    .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED_AWS_ACCESS_KEY_ID]')
+    .replace(/\bASIA[0-9A-Z]{16}\b/g, '[REDACTED_AWS_ACCESS_KEY_ID]')
+    .replace(/\b(A3T[A-Z0-9]|AGPA|AIDA|AROA|AIPA|ANPA|ANVA)[0-9A-Z]{16}\b/g, '[REDACTED_AWS_PRINCIPAL_ID]')
+    .replace(
+      /(["']?)\b((?:aws_)?(?:secret_access_key|session_token|access_token|api[_-]?key|private[_-]?key|password|passwd|pwd|token|secret))\b\1(\s*[:=]\s*)(?:"(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'|[^\s"',}]+)/gi,
+      '$1$2$1$3[REDACTED]'
+    )
+    .replace(/\b(Authorization:\s*)(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi, '$1$2 [REDACTED]')
+    .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{20,}/gi, '$1 [REDACTED]');
 }
 
 function resolveAmi(profile: EnvironmentProfile, region: string): string {
@@ -330,13 +345,22 @@ export async function runEc2AnsibleTest(options: Ec2TestOptions): Promise<Ansibl
       const error = err as { stderr?: Buffer; stdout?: Buffer };
       const stderr = error.stderr?.toString() || '';
       const stdout = error.stdout?.toString() || '';
+      // Molecule writes useful diagnostics to both streams; merge them so we
+      // don't drop half the picture when both are populated.
+      const combined = [stderr, stdout].filter(Boolean).join('\n--- molecule stdout ---\n')
+        || 'Molecule EC2 test failed';
+      const redacted = redactOutput(combined);
+      const truncated = redacted.slice(0, MOLECULE_ERROR_LOG_LIMIT);
+      // Echo to the CI log so failures are visible without downloading the
+      // JSON report artifact. Keep raw Molecule output out of logs/results.
+      console.error(truncated);
       return {
         passed: false,
         os: profile.os,
         arch: 'x86_64',
         duration_ms: Date.now() - start,
         driver: 'ec2',
-        error: (stderr || stdout || 'Molecule EC2 test failed').slice(0, 2000),
+        error: truncated,
       };
     }
   } finally {

@@ -75,3 +75,31 @@
 ## ~~INFRA-026: AWS account setup and GitHub connection (manual prerequisite)~~
 **Resolved**: 2026-05-09 (workflow run 25609469669)
 **Description**: Verified end-to-end that the manual AWS bootstrap from INFRA-021 is complete and functional. AWS account `AWS_ACCOUNT_ID` is active with Terraform-managed VPC, subnet, IGW, security group, key pair, OIDC provider, and IAM role. All five GitHub Secrets (`AWS_ROLE_ARN`, `EC2_SUBNET_ID`, `EC2_SECURITY_GROUP_ID`, `EC2_KEY_PAIR_NAME`, `EC2_SSH_PRIVATE_KEY`) are populated. The `test-aws-connection.yml` smoke test now passes on `main`: OIDC role assumption succeeds, `aws sts get-caller-identity` resolves, `describe-subnets`/`describe-security-groups`/`describe-key-pairs` all return the expected resources, and `ssh-keygen -y -f` validates the SSH key. Diagnosis along the way uncovered that `${{ secrets.X }}` substitution strips trailing newlines and that OpenSSH 9.x rejects newline-less PEM files, fixed by switching the workflow to `printf '%s\n'` with the secret routed via an `env:` block.
+
+## ~~INFRA-032: Redact Molecule EC2 failure output~~
+**Resolved**: 2026-05-10 (commit ea3ea18)
+**Description**: Updated `cli/drivers/ansible-ec2.ts` so Molecule EC2 failure output is redacted before it is echoed to CI logs or returned in the JSON result error field. Increased the failure-summary truncation limit from 2,000 to 10,000 characters while adding redaction for AWS keys, tokens/passwords, authorization headers, and private key blocks.
+
+## ~~INFRA-033: Avoid secret-shaped redaction test literals~~
+**Resolved**: 2026-05-10 (commit 0e97abc)
+**Description**: Updated `tests/ansible-ec2.test.ts` so redaction fixtures are assembled from safe fragments at runtime. The test still exercises the same AWS key, token/password, authorization header, and private key patterns without storing full secret-shaped values as single source literals.
+
+## ~~INFRA-034: Enable Node type resolution for test imports~~
+**Resolved**: 2026-05-10 (commit 8c0ca82)
+**Description**: Updated `tsconfig.json` to use Node module resolution and explicit Node ambient types so TypeScript recognizes built-in imports such as `node:assert/strict` and `node:test` in the Node test suite.
+
+## ~~INFRA-035: Tighten Molecule redaction and test typing config~~
+**Resolved**: 2026-05-10 (commit a3f769b)
+**Description**: Updated Molecule EC2 output redaction so quoted key/value secrets with embedded whitespace are fully masked before reaching CI logs or JSON error output. Moved explicit Node ambient types out of the base `tsconfig.json` into `tsconfig.test.json` and wired `npm run typecheck` to validate the Node test suite with that test-specific config.
+
+## ~~INFRA-036: Handle escaped quotes in key-value redaction~~
+**Resolved**: 2026-05-10 (commit 254d3b5)
+**Description**: Updated Molecule EC2 output redaction so quoted key-value secrets containing escaped quote characters are fully masked before reaching CI logs or JSON error output. Added coverage for escaped-quote password values in `tests/ansible-ec2.test.ts`.
+
+## ~~INFRA-037: Restore non-deprecated TypeScript module resolution~~
+**Resolved**: 2026-05-10 (commit a422b2b)
+**Description**: Restored the base app `tsconfig.json` to `moduleResolution: "Bundler"` to avoid the deprecated `node`/`node10` resolution alias while keeping test-specific Node ambient types in `tsconfig.test.json`.
+
+## ~~INFRA-038: Redact JSON-quoted secret keys~~
+**Resolved**: 2026-05-10 (commit d52389a)
+**Description**: Updated Molecule EC2 output redaction so JSON-style quoted secret keys such as `"password"` and `"token"` are masked before reaching CI logs or JSON error output. Added regression coverage for JSON-formatted credential output in `tests/ansible-ec2.test.ts`.
