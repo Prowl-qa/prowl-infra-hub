@@ -124,8 +124,8 @@ export function redactOutput(output: string): string {
     .replace(/\bASIA[0-9A-Z]{16}\b/g, '[REDACTED_AWS_ACCESS_KEY_ID]')
     .replace(/\b(A3T[A-Z0-9]|AGPA|AIDA|AROA|AIPA|ANPA|ANVA)[0-9A-Z]{16}\b/g, '[REDACTED_AWS_PRINCIPAL_ID]')
     .replace(
-      /\b((?:aws_)?(?:secret_access_key|session_token|access_token|api[_-]?key|private[_-]?key|password|passwd|pwd|token|secret))\b(\s*[:=]\s*)(?:"(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'|[^\s"',}]+)/gi,
-      '$1$2[REDACTED]'
+      /(["']?)\b((?:aws_)?(?:secret_access_key|session_token|access_token|api[_-]?key|private[_-]?key|password|passwd|pwd|token|secret))\b\1(\s*[:=]\s*)(?:"(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'|[^\s"',}]+)/gi,
+      '$1$2$1$3[REDACTED]'
     )
     .replace(/\b(Authorization:\s*)(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi, '$1$2 [REDACTED]')
     .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{20,}/gi, '$1 [REDACTED]');
