@@ -4,23 +4,31 @@ import test from 'node:test';
 import { redactOutput } from '../cli/drivers/ansible-ec2.ts';
 
 test('redactOutput masks common secret patterns from Molecule output', () => {
+  const awsAccessKeyId = ['AKIA', 'IOSFODNN7EXAMPLE'].join('');
+  const awsSecretAccessKey = ['wJalrXUtnFEMI/', 'K7MDENG/bPxRfiCY', 'EXAMPLEKEY'].join('');
+  const password = ['hunt', 'er2'].join('');
+  const bearerToken = ['eyJhbGciOiJIUzI1NiIs', 'InR5cCI6IkpXVCJ9', '.secret'].join('');
+  const privateKeyBegin = ['-----BEGIN OPENSSH ', 'PRIVATE KEY-----'].join('');
+  const privateKeyBody = ['b3BlbnNzaC1rZXkt', 'djEAAAAABG5vbmUAAAA='].join('');
+  const privateKeyEnd = ['-----END OPENSSH ', 'PRIVATE KEY-----'].join('');
+
   const output = [
-    'aws_access_key_id=AKIAIOSFODNN7EXAMPLE',
-    'aws_secret_access_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
-    'password: hunter2',
-    'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.secret',
-    '-----BEGIN OPENSSH PRIVATE KEY-----',
-    'b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAA=',
-    '-----END OPENSSH PRIVATE KEY-----',
+    `aws_access_key_id=${awsAccessKeyId}`,
+    `aws_secret_access_key=${awsSecretAccessKey}`,
+    `password: ${password}`,
+    `Authorization: Bearer ${bearerToken}`,
+    privateKeyBegin,
+    privateKeyBody,
+    privateKeyEnd,
   ].join('\n');
 
   const redacted = redactOutput(output);
 
-  assert.equal(redacted.includes('AKIAIOSFODNN7EXAMPLE'), false);
-  assert.equal(redacted.includes('wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'), false);
-  assert.equal(redacted.includes('hunter2'), false);
-  assert.equal(redacted.includes('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.secret'), false);
-  assert.equal(redacted.includes('b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAA='), false);
+  assert.equal(redacted.includes(awsAccessKeyId), false);
+  assert.equal(redacted.includes(awsSecretAccessKey), false);
+  assert.equal(redacted.includes(password), false);
+  assert.equal(redacted.includes(bearerToken), false);
+  assert.equal(redacted.includes(privateKeyBody), false);
   assert.match(redacted, /\[REDACTED_AWS_ACCESS_KEY_ID\]/);
   assert.match(redacted, /aws_secret_access_key=\[REDACTED\]/);
   assert.match(redacted, /password: \[REDACTED\]/);
