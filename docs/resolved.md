@@ -99,3 +99,7 @@
 ## ~~INFRA-037: Restore non-deprecated TypeScript module resolution~~
 **Resolved**: 2026-05-10 (commit a422b2b)
 **Description**: Restored the base app `tsconfig.json` to `moduleResolution: "Bundler"` to avoid the deprecated `node`/`node10` resolution alias while keeping test-specific Node ambient types in `tsconfig.test.json`.
+
+## ~~INFRA-038: Redact JSON-quoted secret keys~~
+**Resolved**: 2026-05-10 (commit d52389a)
+**Description**: Updated Molecule EC2 output redaction so JSON-style quoted secret keys such as `"password"` and `"token"` are masked before reaching CI logs or JSON error output. Added regression coverage for JSON-formatted credential output in `tests/ansible-ec2.test.ts`.
