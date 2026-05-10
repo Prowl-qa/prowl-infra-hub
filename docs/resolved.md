@@ -95,3 +95,7 @@
 ## ~~INFRA-036: Handle escaped quotes in key-value redaction~~
 **Resolved**: 2026-05-10 (commit 254d3b5)
 **Description**: Updated Molecule EC2 output redaction so quoted key-value secrets containing escaped quote characters are fully masked before reaching CI logs or JSON error output. Added coverage for escaped-quote password values in `tests/ansible-ec2.test.ts`.
+
+## ~~INFRA-037: Restore non-deprecated TypeScript module resolution~~
+**Resolved**: 2026-05-10 (commit a422b2b)
+**Description**: Restored the base app `tsconfig.json` to `moduleResolution: "Bundler"` to avoid the deprecated `node`/`node10` resolution alias while keeping test-specific Node ambient types in `tsconfig.test.json`.
