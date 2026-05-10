@@ -75,3 +75,7 @@
 ## ~~INFRA-026: AWS account setup and GitHub connection (manual prerequisite)~~
 **Resolved**: 2026-05-09 (workflow run 25609469669)
 **Description**: Verified end-to-end that the manual AWS bootstrap from INFRA-021 is complete and functional. AWS account `AWS_ACCOUNT_ID` is active with Terraform-managed VPC, subnet, IGW, security group, key pair, OIDC provider, and IAM role. All five GitHub Secrets (`AWS_ROLE_ARN`, `EC2_SUBNET_ID`, `EC2_SECURITY_GROUP_ID`, `EC2_KEY_PAIR_NAME`, `EC2_SSH_PRIVATE_KEY`) are populated. The `test-aws-connection.yml` smoke test now passes on `main`: OIDC role assumption succeeds, `aws sts get-caller-identity` resolves, `describe-subnets`/`describe-security-groups`/`describe-key-pairs` all return the expected resources, and `ssh-keygen -y -f` validates the SSH key. Diagnosis along the way uncovered that `${{ secrets.X }}` substitution strips trailing newlines and that OpenSSH 9.x rejects newline-less PEM files, fixed by switching the workflow to `printf '%s\n'` with the secret routed via an `env:` block.
+
+## ~~INFRA-032: Redact Molecule EC2 failure output~~
+**Resolved**: 2026-05-10 (commit ea3ea18)
+**Description**: Updated `cli/drivers/ansible-ec2.ts` so Molecule EC2 failure output is redacted before it is echoed to CI logs or returned in the JSON result error field. Added coverage for common AWS keys, token/password fields, authorization headers, and private key blocks while preserving the existing 10,000-character failure summary limit.
