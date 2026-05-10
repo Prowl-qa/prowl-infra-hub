@@ -91,3 +91,7 @@
 ## ~~INFRA-035: Tighten Molecule redaction and test typing config~~
 **Resolved**: 2026-05-10 (commit a3f769b)
 **Description**: Updated Molecule EC2 output redaction so quoted key/value secrets with embedded whitespace are fully masked before reaching CI logs or JSON error output. Moved explicit Node ambient types out of the base `tsconfig.json` into `tsconfig.test.json` and wired `npm run typecheck` to validate the Node test suite with that test-specific config.
+
+## ~~INFRA-036: Handle escaped quotes in key-value redaction~~
+**Resolved**: 2026-05-10 (commit 254d3b5)
+**Description**: Updated Molecule EC2 output redaction so quoted key-value secrets containing escaped quote characters are fully masked before reaching CI logs or JSON error output. Added coverage for escaped-quote password values in `tests/ansible-ec2.test.ts`.
