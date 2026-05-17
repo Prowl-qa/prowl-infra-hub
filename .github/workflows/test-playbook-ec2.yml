@@ -80,7 +80,17 @@ jobs:
           python-version: '3.11'
 
       - name: Install Molecule and EC2 driver
-        run: pip install molecule molecule-plugins[ec2] boto3 botocore
+        # Pin to the last molecule-plugins release that bundled working
+        # create.yml / destroy.yml playbooks for the EC2 driver. Molecule 6+
+        # dropped the bundled driver playbooks, which caused `create` to run
+        # as a no-op and converge to fail with "Could not resolve hostname".
+        run: |
+          pip install \
+            'molecule>=5,<6' \
+            'molecule-plugins[ec2]==23.5.3' \
+            'ansible-core>=2.15,<2.18' \
+            boto3 botocore
+          ansible-galaxy collection install amazon.aws community.aws
 
       - name: Write SSH key
         run: |
