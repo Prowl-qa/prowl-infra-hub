@@ -116,7 +116,9 @@ data "aws_iam_policy_document" "molecule_ec2" {
     condition {
       test     = "ForAllValues:StringEquals"
       variable = "aws:TagKeys"
-      values   = ["Project", "RunId", "environment", "managed-by", "prowl-test"]
+      # "Name" is set by amazon.aws.ec2_instance's `name:` parameter, which
+      # we use to identify each Molecule test instance.
+      values   = ["Project", "RunId", "environment", "managed-by", "prowl-test", "Name"]
     }
   }
 

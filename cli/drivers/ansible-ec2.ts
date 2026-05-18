@@ -247,112 +247,43 @@ export function getCreatePlaybook(
   const safeRegion = validateAwsRegion(region);
   const instanceName = getInstanceName(profile, testRunId, options.playbookPath);
   const spotMaxPrice = getEc2SpotMaxPrice(instanceType, options.maxPrice);
+  // Launch as a one-time spot instance via the RunInstances API
+  // (instance_market_options). This keeps IAM surface small — RunInstances
+  // is already allowed by the molecule_ec2 policy — and avoids the older
+  // ec2:RequestSpotInstances code path. Tagging happens atomically at launch.
   return `---
 - name: Create EC2 test instance
   hosts: localhost
   connection: local
   gather_facts: false
   tasks:
-    - name: Request spot instance ${instanceName}
-      amazon.aws.ec2_spot_instance:
-        launch_specification:
-          image_id: ${ami}
-          instance_type: ${instanceType}
-          key_name: ${options.keyPairName}
-          network_interfaces:
-            - associate_public_ip_address: true
-              delete_on_termination: true
-              device_index: 0
-              groups:
-                - ${options.securityGroupId}
-              subnet_id: ${options.subnetId}
-        spot_price: "${spotMaxPrice}"
-        spot_type: one-time
-        interruption: terminate
-        state: present
+    - name: Launch spot instance ${instanceName}
+      amazon.aws.ec2_instance:
+        name: ${instanceName}
+        image_id: ${ami}
+        instance_type: ${instanceType}
+        vpc_subnet_id: ${options.subnetId}
+        security_group: ${options.securityGroupId}
+        key_name: ${options.keyPairName}
+        network_interfaces:
+          - assign_public_ip: true
+        state: started
+        wait: true
+        wait_timeout: 600
         region: ${safeRegion}
+        instance_market_options:
+          market_type: spot
+          spot_options:
+            max_price: "${spotMaxPrice}"
+            spot_instance_type: one-time
+            instance_interruption_behavior: terminate
         tags:
           prowl-test: "true"
           Project: ${EC2_TEST_PROJECT_TAG}
           RunId: "${testRunId}"
           managed-by: molecule
           environment: ${options.envProfile}
-          Name: ${instanceName}
-      register: spot_result
-
-    - name: Write provisional spot request config for Molecule cleanup
-      ansible.builtin.copy:
-        dest: "{{ molecule_instance_config }}"
-        mode: "0644"
-        content: |
-          - instance: ${instanceName}
-            spot_instance_request_ids:
-              - {{ spot_result.spot_request.spot_instance_request_id }}
-            instance_ids: []
-
-    - name: Wait for spot request fulfillment
-      ansible.builtin.shell: |
-        set -euo pipefail
-        deadline=$((SECONDS + 300))
-        request_id="{{ spot_result.spot_request.spot_instance_request_id }}"
-
-        while [ "$SECONDS" -lt "$deadline" ]; do
-          request_json=$(aws ec2 describe-spot-instance-requests --spot-instance-request-ids "$request_id" --region ${safeRegion})
-          state=$(printf '%s' "$request_json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["SpotInstanceRequests"][0].get("State", ""))')
-
-          if [ "$state" = "active" ]; then
-            exit 0
-          fi
-
-          case "$state" in
-            failed|closed|cancelled)
-              printf '%s\\n' "$request_json" >&2
-              exit 1
-              ;;
-          esac
-
-          sleep 10
-        done
-
-        aws ec2 describe-spot-instance-requests --spot-instance-request-ids "$request_id" --region ${safeRegion} >&2
-        exit 1
-      args:
-        executable: /bin/bash
-      changed_when: false
-
-    - name: Read launched spot instance id
-      ansible.builtin.command: >
-        aws ec2 describe-spot-instance-requests
-        --spot-instance-request-ids {{ spot_result.spot_request.spot_instance_request_id }}
-        --query 'SpotInstanceRequests[0].InstanceId'
-        --output text
-        --region ${safeRegion}
-      register: spot_instance_id
-      changed_when: false
-
-    - name: Tag launched spot instance
-      amazon.aws.ec2_tag:
-        resource: "{{ spot_instance_id.stdout }}"
-        region: ${safeRegion}
-        tags:
-          prowl-test: "true"
-          Project: ${EC2_TEST_PROJECT_TAG}
-          RunId: "${testRunId}"
-          managed-by: molecule
-          environment: ${options.envProfile}
-          Name: ${instanceName}
-
-    - name: Read launched spot instance details
-      amazon.aws.ec2_instance_info:
-        instance_ids:
-          - "{{ spot_instance_id.stdout }}"
-        region: ${safeRegion}
       register: ec2_result
-      until:
-        - ec2_result.instances | length > 0
-        - ec2_result.instances[0].public_ip_address is defined
-      retries: 30
-      delay: 10
 
     - name: Wait for SSH on launched instance
       ansible.builtin.wait_for:
@@ -371,15 +302,15 @@ export function getCreatePlaybook(
             user: ${profile.sshUser}
             port: 22
             identity_file: ${options.sshKeyPath}
-            spot_instance_request_ids:
-              - {{ spot_result.spot_request.spot_instance_request_id }}
             instance_ids:
-              - {{ spot_instance_id.stdout }}
+              - {{ ec2_result.instances[0].instance_id }}
 `;
 }
 
 function getDestroyPlaybook(region: string): string {
   const safeRegion = validateAwsRegion(region);
+  // One-time spot requests are auto-cancelled when the underlying instance
+  // is terminated, so we only need to terminate the instances themselves.
   return `---
 - name: Destroy EC2 test instance
   hosts: localhost
@@ -401,22 +332,7 @@ function getDestroyPlaybook(region: string): string {
         instance_ids_to_terminate: "{{ instance_config | map(attribute='instance_ids') | flatten | list }}"
       when: instance_config_stat.stat.exists
 
-    - name: Collect spot request ids to cancel
-      ansible.builtin.set_fact:
-        spot_request_ids_to_cancel: "{{ instance_config | map(attribute='spot_instance_request_ids') | select('defined') | flatten | list }}"
-      when: instance_config_stat.stat.exists
-
-    - name: Cancel spot requests and terminate associated instances
-      amazon.aws.ec2_spot_instance:
-        spot_instance_request_ids: "{{ spot_request_ids_to_cancel }}"
-        state: absent
-        terminate_instances: true
-        region: ${safeRegion}
-      when:
-        - instance_config_stat.stat.exists
-        - spot_request_ids_to_cancel | length > 0
-
-    - name: Terminate launched instances without spot request metadata
+    - name: Terminate launched instances
       amazon.aws.ec2_instance:
         instance_ids: "{{ instance_ids_to_terminate }}"
         state: terminated
@@ -425,7 +341,6 @@ function getDestroyPlaybook(region: string): string {
       when:
         - instance_config_stat.stat.exists
         - instance_ids_to_terminate | length > 0
-        - spot_request_ids_to_cancel | default([]) | length == 0
 
     - name: Remove instance config
       ansible.builtin.file:
