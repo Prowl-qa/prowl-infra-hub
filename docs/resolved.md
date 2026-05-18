@@ -147,3 +147,7 @@
 ## ~~INFRA-049: Persist EC2 instance metadata before SSH wait~~
 **Resolved**: 2026-05-18 (commit 3fa76ce)
 **Description**: Moved the generated Molecule instance config write ahead of the SSH readiness check so `destroy.yml` can still read the launched instance ID and terminate it if `ansible.builtin.wait_for` fails during boot, networking, or security group readiness. Added generator coverage to keep the metadata write before the SSH wait task.
+
+## ~~INFRA-050: Launch EC2 tests with Spot instance module~~
+**Resolved**: 2026-05-18 (commit f9c2944)
+**Description**: Updated the generated EC2 create playbook to request Spot capacity with `amazon.aws.ec2_spot_instance` instead of unsupported Spot parameters on `amazon.aws.ec2_instance`. The launch specification now uses `network_interfaces` with subnet, security group, and public-IP assignment fields, persists Spot request metadata before fulfillment waits, records the launched instance ID before SSH readiness, and destroys via `ec2_spot_instance` with `terminate_instances: true`.
