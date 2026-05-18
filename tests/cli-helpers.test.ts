@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  ALLOWED_EC2_INSTANCE_TYPES,
   ENVIRONMENT_PROFILES,
   extractPlaybookBlock,
   getCreatePlaybook,
@@ -9,6 +10,7 @@ import {
   getInstanceName,
   getTerminateTaggedEc2InstancesFallbackCommand,
   validateAwsRegion,
+  validateEc2InstanceType,
 } from '../cli/drivers/ansible-ec2.ts';
 import { extractAnsibleTasksForInclude } from '../cli/drivers/ansible.ts';
 import { updatePlaybookYamlContent } from '../cli/playbook-metadata.ts';
@@ -137,9 +139,10 @@ test('getTerminateTaggedEc2InstancesFallbackCommand keeps instance ids attached 
   assert.match(command, /Name=tag:RunId,Values=run-123/);
   assert.match(command, /SPOT_INSTANCE_IDS=\$\(aws ec2 describe-spot-instance-requests/);
   assert.match(command, /TAGGED_INSTANCE_IDS=\$\(aws ec2 describe-instances/);
-  assert.match(command, /grep -v '\^None\$'/);
+  assert.match(command, /grep -v -E '\^\(\$\|None\)\$'/);
+  assert.match(command, /if \[ -n "\$\(printf '%s' "\$INSTANCE_IDS" \| tr -d '\[:space:\]'\)" \]; then/);
   assert.match(command, /aws ec2 cancel-spot-instance-requests --spot-instance-request-ids \$SPOT_REQUEST_IDS --region us-east-1/);
-  assert.match(command, /aws ec2 terminate-instances --instance-ids \$INSTANCE_IDS --region us-east-1/);
+  assert.match(command, /aws ec2 terminate-instances --instance-ids "\$@" --region us-east-1/);
   assert.doesNotMatch(command, /aws ec2 terminate-instances --instance-ids --region us-east-1/);
   assert.doesNotMatch(command, /xargs/);
 });
@@ -180,9 +183,15 @@ test('getEc2SpotMaxPrice uses overrides and instance-size defaults', () => {
   assert.equal(getEc2SpotMaxPrice('t3.small', '0.12'), '0.12');
 });
 
+test('validateEc2InstanceType enforces the EC2 test allowlist', () => {
+  assert.deepEqual([...ALLOWED_EC2_INSTANCE_TYPES], ['t3.micro', 't3.small', 't3.medium']);
+  assert.equal(validateEc2InstanceType(' t3.medium '), 't3.medium');
+  assert.throws(() => validateEc2InstanceType('m6i.large'), /Unsupported EC2 instance type/);
+});
+
 test('getCreatePlaybook launches a spot instance via ec2_spot_instance', () => {
   const profile = ENVIRONMENT_PROFILES['ubuntu-2204'];
-  const playbook = getCreatePlaybook('ami-1234567890abcdef0', profile, 'm6i.large', {
+  const playbook = getCreatePlaybook('ami-1234567890abcdef0', profile, 't3.medium', {
     playbookPath: 'patching/update-packages.yml',
     envProfile: 'ubuntu-2204',
     subnetId: 'subnet-123',
@@ -215,13 +224,24 @@ test('getCreatePlaybook launches a spot instance via ec2_spot_instance', () => {
   assert.match(playbook, /Project: ec2-test-env/);
   assert.match(playbook, /RunId: "run-123"/);
   assert.match(playbook, /prowl-test: "true"/);
-  assert.match(playbook, /InstanceType: m6i\.large/);
+  assert.match(playbook, /InstanceType: t3\.medium/);
   assert.doesNotMatch(playbook, /amazon\.aws\.ec2_tag:/);
   assert.match(playbook, /describe-spot-instance-requests/);
   assert.match(playbook, /spot_instance_request_ids:/);
   assert.match(playbook, /Wait for spot request fulfillment/);
   assert.throws(
     () => getCreatePlaybook('ami-1234567890abcdef0', profile, 'm6i.large', {
+      playbookPath: 'patching/update-packages.yml',
+      envProfile: 'ubuntu-2204',
+      subnetId: 'subnet-123',
+      securityGroupId: 'sg-123',
+      keyPairName: 'test-key',
+      sshKeyPath: '/tmp/test-key.pem',
+    }, 'run-123', 'us-east-1'),
+    /Unsupported EC2 instance type/
+  );
+  assert.throws(
+    () => getCreatePlaybook('ami-1234567890abcdef0', profile, 't3.small', {
       playbookPath: 'patching/update-packages.yml',
       envProfile: 'ubuntu-2204',
       subnetId: 'subnet-123',
