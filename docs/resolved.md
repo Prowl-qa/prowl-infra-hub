@@ -155,3 +155,7 @@
 ## ~~INFRA-051: Constrain EC2 Spot IAM tagging and type guard~~
 **Resolved**: 2026-05-18 (commit 6c2d502)
 **Description**: Reinstated launch-only `ec2:CreateTags` constraints with `ec2:CreateAction`, replaced the unsupported `ec2:InstanceType` condition on `RequestSpotInstances` with the supported `aws:RequestTag/InstanceType` mirror emitted by `cli/drivers/ansible-ec2.ts`, removed post-launch instance tagging, and updated fallback cleanup to terminate instances found through tagged Spot requests.
+
+## ~~INFRA-052: Scope EC2 Spot cleanup permissions~~
+**Resolved**: 2026-05-18 (commit 22401ab)
+**Description**: Re-added the `ec2:ResourceTag/Project` guard to Spot termination permissions, split `ec2:CancelSpotInstanceRequests` into a project-tagged Spot request resource statement, moved Spot instance-type enforcement out of spoofable `aws:RequestTag/InstanceType` IAM conditions and into `cli/drivers/ansible-ec2.ts` caller validation, and hardened fallback cleanup so empty ID output cannot invoke `terminate-instances`.
