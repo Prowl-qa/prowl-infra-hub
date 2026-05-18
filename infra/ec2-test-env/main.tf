@@ -83,19 +83,6 @@ data "aws_iam_policy_document" "molecule_ec2" {
   }
 
   statement {
-    sid       = "EC2TerminateProjectInstances"
-    effect    = "Allow"
-    actions   = ["ec2:TerminateInstances"]
-    resources = ["arn:aws:ec2:*:*:instance/*"]
-
-    condition {
-      test     = "StringEquals"
-      variable = "ec2:ResourceTag/Project"
-      values   = ["ec2-test-env"]
-    }
-  }
-
-  statement {
     sid       = "EC2TerminateAllowedSpotInstances"
     effect    = "Allow"
     actions   = ["ec2:TerminateInstances"]
@@ -126,7 +113,7 @@ data "aws_iam_policy_document" "molecule_ec2" {
     actions = ["ec2:CreateTags"]
     # Tag only during resource creation. This prevents the role from
     # retagging arbitrary existing instances as Project=ec2-test-env and
-    # then terminating them through EC2TerminateProjectInstances.
+    # then terminating them through tag-scoped cleanup permissions.
     resources = [
       "arn:aws:ec2:*:*:instance/*",
       "arn:aws:ec2:*:*:spot-instances-request/*",
@@ -141,7 +128,7 @@ data "aws_iam_policy_document" "molecule_ec2" {
     condition {
       test     = "StringEquals"
       variable = "ec2:CreateAction"
-      values   = ["RunInstances", "RequestSpotInstances"]
+      values   = ["RunInstances"]
     }
 
     condition {
@@ -151,14 +138,13 @@ data "aws_iam_policy_document" "molecule_ec2" {
     }
   }
 
-  # Spot instance request lifecycle. amazon.aws.ec2_spot_instance calls
-  # RequestSpotInstances, then we describe to wait for fulfillment, and
-  # finally cancel on test teardown.
+  # Spot request lifecycle. Launches go through RunInstances with Spot market
+  # options so the RunInstances deny conditions enforce type and spot-only
+  # constraints; cleanup only needs describe/cancel for tagged requests.
   statement {
     sid    = "AllowSpotApi"
     effect = "Allow"
     actions = [
-      "ec2:RequestSpotInstances",
       "ec2:DescribeSpotInstanceRequests",
     ]
     resources = ["*"]
@@ -191,13 +177,12 @@ data "aws_iam_policy_document" "molecule_ec2" {
     }
   }
 
-  # Do not add a RestrictSpotInstanceTypes deny using aws:RequestTag/InstanceType:
-  # RequestSpotInstances tags are caller-supplied and spoofable. The EC2 driver
-  # validates Spot instance types against the same set as var.allowed_instance_types
-  # before calling RequestSpotInstances.
+  # Do not grant RequestSpotInstances or add a RestrictSpotInstanceTypes deny
+  # using aws:RequestTag/InstanceType. Spot launches use RunInstances with
+  # InstanceMarketOptions, and the EC2 driver also validates instance types
+  # against the same set as var.allowed_instance_types before launch.
 
-  # Restrict to spot instances only (cost control) — only applies to the
-  # RunInstances code path. RequestSpotInstances is inherently spot.
+  # Restrict to spot instances only (cost control) on the RunInstances path.
   statement {
     sid       = "RequireSpotInstances"
     effect    = "Deny"
