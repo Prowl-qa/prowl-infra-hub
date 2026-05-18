@@ -131,3 +131,7 @@
 ## ~~INFRA-045: Accept AWS partition region names~~
 **Resolved**: 2026-05-17 (commit 7c3922e)
 **Description**: Broadened EC2 driver region validation so valid AWS partition region names such as `us-iso-east-1`, `us-isob-east-1`, `eu-isoe-west-1`, `us-isof-south-1`, and `eusc-de-east-1` are accepted before AWS CLI calls, while unsafe characters and malformed region strings still fail validation.
+
+## ~~INFRA-046: Build CLI artifact before package publish~~
+**Resolved**: 2026-05-18 (commit 2621de5)
+**Description**: Updated the published CLI package to run its esbuild bundle step during `prepack`, ensuring `dist/cli.js` exists before `npm pack` or publish. Added package-local Node build dependencies and a file-local Node type reference for the EC2 driver so Node built-ins remain typed when the CLI source is checked outside the app package context.
