@@ -141,6 +141,19 @@ jobs:
 
       - name: Terminate any leaked test instances
         run: |
+          echo "Checking for leaked prowl-test spot requests..."
+          SPOT_REQUEST_IDS=$(aws ec2 describe-spot-instance-requests \
+            --filters "Name=tag:prowl-test,Values=true" "Name=tag:Project,Values=ec2-test-env" "Name=tag:RunId,Values=${{ env.RUN_ID }}" "Name=state,Values=open,active" \
+            --query "SpotInstanceRequests[].SpotInstanceRequestId" \
+            --output text 2>/dev/null || true)
+
+          if [ -n "$SPOT_REQUEST_IDS" ] && [ "$SPOT_REQUEST_IDS" != "None" ]; then
+            echo "Cancelling leaked spot requests: $SPOT_REQUEST_IDS"
+            aws ec2 cancel-spot-instance-requests --spot-instance-request-ids $SPOT_REQUEST_IDS
+          else
+            echo "No leaked spot requests found."
+          fi
+
           echo "Checking for leaked prowl-test instances..."
           INSTANCE_IDS=$(aws ec2 describe-instances \
             --filters "Name=tag:prowl-test,Values=true" "Name=tag:Project,Values=ec2-test-env" "Name=tag:RunId,Values=${{ env.RUN_ID }}" "Name=instance-state-name,Values=running,pending" \

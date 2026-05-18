@@ -134,6 +134,7 @@ test('getTerminateTaggedEc2InstancesFallbackCommand keeps instance ids attached 
   assert.match(command, /Name=tag:environment,Values=ubuntu-2204/);
   assert.match(command, /Name=tag:Project,Values=ec2-test-env/);
   assert.match(command, /Name=tag:RunId,Values=run-123/);
+  assert.match(command, /aws ec2 cancel-spot-instance-requests --spot-instance-request-ids \$SPOT_REQUEST_IDS --region us-east-1/);
   assert.match(command, /aws ec2 terminate-instances --instance-ids \$INSTANCE_IDS --region us-east-1/);
   assert.doesNotMatch(command, /aws ec2 terminate-instances --instance-ids --region us-east-1/);
   assert.doesNotMatch(command, /xargs/);
@@ -173,6 +174,7 @@ test('getCreatePlaybook uses the supported Spot module and spot max price', () =
   assert.match(playbook, /network_interfaces:\n\s+- associate_public_ip_address: true/);
   assert.match(playbook, /spot_price: "0\.12"/);
   assert.match(playbook, /spot_instance_request_ids:/);
+  assert.match(playbook, /Write provisional spot request config for Molecule cleanup/);
 });
 
 test('extractPlaybookBlock stops before the next top-level YAML key', () => {
