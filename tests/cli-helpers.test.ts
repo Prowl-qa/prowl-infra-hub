@@ -189,7 +189,7 @@ test('validateEc2InstanceType enforces the EC2 test allowlist', () => {
   assert.throws(() => validateEc2InstanceType('m6i.large'), /Unsupported EC2 instance type/);
 });
 
-test('getCreatePlaybook launches a spot instance via ec2_spot_instance', () => {
+test('getCreatePlaybook launches a tagged spot instance via RunInstances', () => {
   const profile = ENVIRONMENT_PROFILES['ubuntu-2204'];
   const playbook = getCreatePlaybook('ami-1234567890abcdef0', profile, 't3.medium', {
     playbookPath: 'patching/update-packages.yml',
@@ -201,34 +201,40 @@ test('getCreatePlaybook launches a spot instance via ec2_spot_instance', () => {
     maxPrice: '0.12',
   }, 'run-123', 'us-east-1');
 
-  assert.match(playbook, /amazon\.aws\.ec2_spot_instance:/);
+  assert.match(playbook, /aws ec2 run-instances/);
+  assert.match(playbook, /"InstanceMarketOptions":/);
+  assert.match(playbook, /"MarketType": "spot"/);
+  assert.match(playbook, /"SpotInstanceType": "one-time"/);
+  assert.match(playbook, /"InstanceInterruptionBehavior": "terminate"/);
+  assert.match(playbook, /"MaxPrice": "0\.12"/);
+  assert.match(playbook, /"ResourceType": "instance"/);
+  assert.match(playbook, /"ResourceType": "spot-instances-request"/);
+  assert.match(playbook, /"Key": "Project",\n\s+"Value": "ec2-test-env"/);
+  assert.match(playbook, /"Key": "RunId",\n\s+"Value": "run-123"/);
+  assert.match(playbook, /"Key": "prowl-test",\n\s+"Value": "true"/);
+  assert.match(playbook, /"Key": "InstanceType",\n\s+"Value": "t3\.medium"/);
+  assert.match(playbook, /"Groups": \[\n\s+"sg-123"\n\s+\]/);
+  assert.match(playbook, /"SubnetId": "subnet-123"/);
+  assert.match(playbook, /"AssociatePublicIpAddress": true/);
+  assert.match(playbook, /describe-spot-instance-requests/);
+  assert.match(playbook, /Name=instance-id,Values=\{\{ spot_instance_id \}\}/);
+  assert.match(playbook, /spot_instance_request_ids: \{\{ \[spot_request_id\] if spot_request_id \| length > 0 else \[\] \}\}/);
+  assert.doesNotMatch(playbook, /amazon\.aws\.ec2_spot_instance:/);
   assert.doesNotMatch(playbook, /amazon\.aws\.ec2_instance:\n\s+name:/);
   assert.doesNotMatch(playbook, /instance_market_options:/);
-  assert.match(playbook, /spot_price: "0\.12"/);
-  assert.match(playbook, /spot_type: one-time/);
-  assert.match(playbook, /interruption: terminate/);
-  assert.match(playbook, /network_interfaces:\n\s+- associate_public_ip_address: true/);
-  assert.match(playbook, /groups:\n\s+- sg-123/);
-  assert.match(playbook, /subnet_id: subnet-123/);
   assert.doesNotMatch(playbook, /network:\n\s+assign_public_ip: true/);
   assert.ok(
     playbook.indexOf('Write provisional spot request config for Molecule cleanup')
-      < playbook.indexOf('Wait for spot request fulfillment'),
-    'spot request config must be written before fulfillment wait can fail'
+      < playbook.indexOf('Read launched spot instance details'),
+    'instance config must be written before instance detail polling can fail'
   );
   assert.ok(
     playbook.indexOf('Write instance config for Molecule') < playbook.indexOf('Wait for SSH on launched instance'),
     'instance config must be written before SSH wait can fail'
   );
-  // Atomic launch-and-tag — required tags must all be present.
-  assert.match(playbook, /Project: ec2-test-env/);
-  assert.match(playbook, /RunId: "run-123"/);
-  assert.match(playbook, /prowl-test: "true"/);
-  assert.match(playbook, /InstanceType: t3\.medium/);
   assert.doesNotMatch(playbook, /amazon\.aws\.ec2_tag:/);
-  assert.match(playbook, /describe-spot-instance-requests/);
   assert.match(playbook, /spot_instance_request_ids:/);
-  assert.match(playbook, /Wait for spot request fulfillment/);
+  assert.doesNotMatch(playbook, /Wait for spot request fulfillment/);
   assert.throws(
     () => getCreatePlaybook('ami-1234567890abcdef0', profile, 'm6i.large', {
       playbookPath: 'patching/update-packages.yml',

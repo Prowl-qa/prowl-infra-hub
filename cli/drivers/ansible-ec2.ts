@@ -261,39 +261,85 @@ export function getCreatePlaybook(
   const safeInstanceType = validateEc2InstanceType(instanceType);
   const instanceName = getInstanceName(profile, testRunId, options.playbookPath);
   const spotMaxPrice = getEc2SpotMaxPrice(safeInstanceType, options.maxPrice);
+  const tags = [
+    { Key: 'prowl-test', Value: 'true' },
+    { Key: 'Project', Value: EC2_TEST_PROJECT_TAG },
+    { Key: 'RunId', Value: testRunId },
+    { Key: 'managed-by', Value: 'molecule' },
+    { Key: 'environment', Value: options.envProfile },
+    { Key: 'InstanceType', Value: safeInstanceType },
+    { Key: 'Name', Value: instanceName },
+  ];
+  const launchRequest = {
+    ImageId: ami,
+    InstanceType: safeInstanceType,
+    KeyName: options.keyPairName,
+    MinCount: 1,
+    MaxCount: 1,
+    InstanceMarketOptions: {
+      MarketType: 'spot',
+      SpotOptions: {
+        MaxPrice: spotMaxPrice,
+        SpotInstanceType: 'one-time',
+        InstanceInterruptionBehavior: 'terminate',
+      },
+    },
+    NetworkInterfaces: [
+      {
+        AssociatePublicIpAddress: true,
+        DeleteOnTermination: true,
+        DeviceIndex: 0,
+        Groups: [options.securityGroupId],
+        SubnetId: options.subnetId,
+      },
+    ],
+    TagSpecifications: [
+      { ResourceType: 'instance', Tags: tags },
+      { ResourceType: 'spot-instances-request', Tags: tags },
+    ],
+  };
+  const launchRequestJson = JSON.stringify(launchRequest, null, 2)
+    .split('\n')
+    .map((line) => `        ${line}`)
+    .join('\n');
+
   return `---
 - name: Create EC2 test instance
   hosts: localhost
   connection: local
   gather_facts: false
   tasks:
-    - name: Request spot instance ${instanceName}
-      amazon.aws.ec2_spot_instance:
-        launch_specification:
-          image_id: ${ami}
-          instance_type: ${safeInstanceType}
-          key_name: ${options.keyPairName}
-          network_interfaces:
-            - associate_public_ip_address: true
-              delete_on_termination: true
-              device_index: 0
-              groups:
-                - ${options.securityGroupId}
-              subnet_id: ${options.subnetId}
-        spot_price: "${spotMaxPrice}"
-        spot_type: one-time
-        interruption: terminate
-        state: present
-        region: ${safeRegion}
-        tags:
-          prowl-test: "true"
-          Project: ${EC2_TEST_PROJECT_TAG}
-          RunId: "${testRunId}"
-          managed-by: molecule
-          environment: ${options.envProfile}
-          InstanceType: ${safeInstanceType}
-          Name: ${instanceName}
-      register: spot_result
+    - name: Launch tagged spot instance ${instanceName}
+      ansible.builtin.shell: |
+        set -euo pipefail
+        request_file=$(mktemp)
+        trap 'rm -f "$request_file"' EXIT
+        cat > "$request_file" <<'JSON'
+${launchRequestJson}
+        JSON
+        aws ec2 run-instances --cli-input-json "file://$request_file" --region ${safeRegion} --output json
+      args:
+        executable: /bin/bash
+      register: run_instances_result
+      changed_when: true
+
+    - name: Extract launched spot instance id
+      ansible.builtin.set_fact:
+        spot_instance_id: "{{ (run_instances_result.stdout | from_json).Instances[0].InstanceId }}"
+
+    - name: Read launched spot request id
+      ansible.builtin.command: >
+        aws ec2 describe-spot-instance-requests
+        --filters Name=instance-id,Values={{ spot_instance_id }}
+        --query 'SpotInstanceRequests[0].SpotInstanceRequestId'
+        --output text
+        --region ${safeRegion}
+      register: spot_request_id_result
+      changed_when: false
+
+    - name: Normalize launched spot request id
+      ansible.builtin.set_fact:
+        spot_request_id: "{{ '' if spot_request_id_result.stdout == 'None' else spot_request_id_result.stdout }}"
 
     - name: Write provisional spot request config for Molecule cleanup
       ansible.builtin.copy:
@@ -301,54 +347,14 @@ export function getCreatePlaybook(
         mode: "0644"
         content: |
           - instance: ${instanceName}
-            spot_instance_request_ids:
-              - {{ spot_result.spot_request.spot_instance_request_id }}
-            instance_ids: []
-
-    - name: Wait for spot request fulfillment
-      ansible.builtin.shell: |
-        set -euo pipefail
-        deadline=$((SECONDS + 300))
-        request_id="{{ spot_result.spot_request.spot_instance_request_id }}"
-
-        while [ "$SECONDS" -lt "$deadline" ]; do
-          request_json=$(aws ec2 describe-spot-instance-requests --spot-instance-request-ids "$request_id" --region ${safeRegion})
-          state=$(printf '%s' "$request_json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["SpotInstanceRequests"][0].get("State", ""))')
-
-          if [ "$state" = "active" ]; then
-            exit 0
-          fi
-
-          case "$state" in
-            failed|closed|cancelled)
-              printf '%s\n' "$request_json" >&2
-              exit 1
-              ;;
-          esac
-
-          sleep 10
-        done
-
-        aws ec2 describe-spot-instance-requests --spot-instance-request-ids "$request_id" --region ${safeRegion} >&2
-        exit 1
-      args:
-        executable: /bin/bash
-      changed_when: false
-
-    - name: Read launched spot instance id
-      ansible.builtin.command: >
-        aws ec2 describe-spot-instance-requests
-        --spot-instance-request-ids {{ spot_result.spot_request.spot_instance_request_id }}
-        --query 'SpotInstanceRequests[0].InstanceId'
-        --output text
-        --region ${safeRegion}
-      register: spot_instance_id
-      changed_when: false
+            spot_instance_request_ids: {{ [spot_request_id] if spot_request_id | length > 0 else [] }}
+            instance_ids:
+              - {{ spot_instance_id }}
 
     - name: Read launched spot instance details
       amazon.aws.ec2_instance_info:
         instance_ids:
-          - "{{ spot_instance_id.stdout }}"
+          - "{{ spot_instance_id }}"
         region: ${safeRegion}
       register: ec2_result
       until:
@@ -367,10 +373,9 @@ export function getCreatePlaybook(
             user: ${profile.sshUser}
             port: 22
             identity_file: ${options.sshKeyPath}
-            spot_instance_request_ids:
-              - {{ spot_result.spot_request.spot_instance_request_id }}
+            spot_instance_request_ids: {{ [spot_request_id] if spot_request_id | length > 0 else [] }}
             instance_ids:
-              - {{ spot_instance_id.stdout }}
+              - {{ spot_instance_id }}
 
     - name: Wait for SSH on launched instance
       ansible.builtin.wait_for:

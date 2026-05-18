@@ -17,7 +17,7 @@ test('EC2 CreateTags is limited to resource creation', () => {
   assert.match(block, /arn:aws:ec2:\*:\*:instance\/\*/);
   assert.match(block, /arn:aws:ec2:\*:\*:spot-instances-request\/\*/);
   assert.match(block, /variable = "ec2:CreateAction"/);
-  assert.match(block, /values\s+= \["RunInstances", "RequestSpotInstances"\]/);
+  assert.match(block, /values\s+= \["RunInstances"\]/);
   assert.match(block, /variable = "aws:RequestTag\/Project"/);
   assert.match(block, /InstanceType/);
   assert.doesNotMatch(ec2Policy, /sid\s+= "EC2TagProjectInstances"/);
@@ -25,8 +25,9 @@ test('EC2 CreateTags is limited to resource creation', () => {
 
 test('RequestSpotInstances instance-type enforcement stays in caller validation', () => {
   assert.doesNotMatch(ec2Policy, /sid\s+= "RestrictSpotInstanceTypes"/);
+  assert.doesNotMatch(ec2Policy, /ec2:RequestSpotInstances/);
   assert.doesNotMatch(ec2Policy, /variable = "aws:RequestTag\/InstanceType"/);
-  assert.match(ec2Policy, /validate[a-zA-Z\s]+var\.allowed_instance_types/);
+  assert.match(ec2Policy, /validates[\s\S]+var\.allowed_instance_types/);
 });
 
 test('spot termination and cancellation stay project-scoped', () => {
@@ -34,11 +35,12 @@ test('spot termination and cancellation stay project-scoped', () => {
   const spotApiBlock = statementBlock('AllowSpotApi');
   const cancelBlock = statementBlock('CancelProjectSpotRequests');
 
+  assert.doesNotMatch(ec2Policy, /sid\s+= "EC2TerminateProjectInstances"/);
   assert.match(terminateBlock, /variable = "ec2:ResourceTag\/Project"/);
   assert.match(terminateBlock, /variable = "ec2:InstanceMarketType"/);
   assert.match(terminateBlock, /variable = "ec2:InstanceType"/);
-  assert.match(spotApiBlock, /ec2:RequestSpotInstances/);
   assert.match(spotApiBlock, /ec2:DescribeSpotInstanceRequests/);
+  assert.doesNotMatch(spotApiBlock, /ec2:RequestSpotInstances/);
   assert.doesNotMatch(spotApiBlock, /ec2:CancelSpotInstanceRequests/);
   assert.match(cancelBlock, /actions\s+= \["ec2:CancelSpotInstanceRequests"\]/);
   assert.match(cancelBlock, /arn:aws:ec2:\*:\*:spot-instances-request\/\*/);
