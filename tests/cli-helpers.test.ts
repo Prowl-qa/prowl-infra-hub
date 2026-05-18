@@ -141,9 +141,14 @@ test('getTerminateTaggedEc2InstancesFallbackCommand keeps instance ids attached 
   assert.doesNotMatch(command, /xargs/);
 });
 
-test('validateAwsRegion accepts standard and GovCloud region names', () => {
+test('validateAwsRegion accepts region names from AWS partitions', () => {
   assert.equal(validateAwsRegion('us-east-1'), 'us-east-1');
   assert.equal(validateAwsRegion('us-gov-west-1'), 'us-gov-west-1');
+  assert.equal(validateAwsRegion('us-iso-east-1'), 'us-iso-east-1');
+  assert.equal(validateAwsRegion('us-isob-east-1'), 'us-isob-east-1');
+  assert.equal(validateAwsRegion('eu-isoe-west-1'), 'eu-isoe-west-1');
+  assert.equal(validateAwsRegion('us-isof-south-1'), 'us-isof-south-1');
+  assert.equal(validateAwsRegion('eusc-de-east-1'), 'eusc-de-east-1');
 });
 
 test('validateAwsRegion rejects invalid or unsafe region strings', () => {
