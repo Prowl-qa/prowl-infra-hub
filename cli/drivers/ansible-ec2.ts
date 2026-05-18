@@ -10,6 +10,8 @@ const EC2_TEST_PROJECT_TAG = 'ec2-test-env';
 const MOLECULE_MAX_BUFFER = 10 * 1024 * 1024;
 const MOLECULE_ERROR_LOG_LIMIT = 10_000;
 const AWS_REGION_PATTERN = /^[a-z]{2,4}(?:-[a-z0-9]+)+-\d+$/;
+// Keep in sync with infra/ec2-test-env/variables.tf var.allowed_instance_types.
+export const ALLOWED_EC2_INSTANCE_TYPES = ['t3.micro', 't3.small', 't3.medium'] as const;
 
 // ---------------------------------------------------------------------------
 // Environment profiles — full OS + Python + security configurations matching
@@ -125,6 +127,17 @@ export function validateAwsRegion(region: string): string {
   }
 
   return region;
+}
+
+export function validateEc2InstanceType(instanceType: string): string {
+  const normalized = instanceType.trim();
+  if (!ALLOWED_EC2_INSTANCE_TYPES.includes(normalized as typeof ALLOWED_EC2_INSTANCE_TYPES[number])) {
+    throw new Error(
+      `Unsupported EC2 instance type: ${instanceType}. Allowed: ${ALLOWED_EC2_INSTANCE_TYPES.join(', ')}`
+    );
+  }
+
+  return normalized;
 }
 
 export function redactOutput(output: string): string {
@@ -245,8 +258,9 @@ export function getCreatePlaybook(
   region: string,
 ): string {
   const safeRegion = validateAwsRegion(region);
+  const safeInstanceType = validateEc2InstanceType(instanceType);
   const instanceName = getInstanceName(profile, testRunId, options.playbookPath);
-  const spotMaxPrice = getEc2SpotMaxPrice(instanceType, options.maxPrice);
+  const spotMaxPrice = getEc2SpotMaxPrice(safeInstanceType, options.maxPrice);
   return `---
 - name: Create EC2 test instance
   hosts: localhost
@@ -257,7 +271,7 @@ export function getCreatePlaybook(
       amazon.aws.ec2_spot_instance:
         launch_specification:
           image_id: ${ami}
-          instance_type: ${instanceType}
+          instance_type: ${safeInstanceType}
           key_name: ${options.keyPairName}
           network_interfaces:
             - associate_public_ip_address: true
@@ -277,7 +291,7 @@ export function getCreatePlaybook(
           RunId: "${testRunId}"
           managed-by: molecule
           environment: ${options.envProfile}
-          InstanceType: ${instanceType}
+          InstanceType: ${safeInstanceType}
           Name: ${instanceName}
       register: spot_result
 
@@ -447,9 +461,10 @@ if [ -n "$SPOT_REQUEST_IDS" ] && [ "$SPOT_REQUEST_IDS" != "None" ]; then
   aws ec2 cancel-spot-instance-requests --spot-instance-request-ids $SPOT_REQUEST_IDS --region ${safeRegion}
 fi
 TAGGED_INSTANCE_IDS=$(aws ec2 describe-instances --filters "Name=tag:prowl-test,Values=true" "Name=tag:Project,Values=${EC2_TEST_PROJECT_TAG}" "Name=tag:environment,Values=${envProfile}" "Name=tag:RunId,Values=${testRunId}" "Name=instance-state-name,Values=running,pending" --query "Reservations[].Instances[].InstanceId" --output text --region ${safeRegion})
-INSTANCE_IDS=$(printf '%s\\n%s\\n' "$TAGGED_INSTANCE_IDS" "$SPOT_INSTANCE_IDS" | tr '\\t ' '\\n' | grep -v '^None$' | sort -u | tr '\\n' ' ')
-if [ -n "$INSTANCE_IDS" ] && [ "$INSTANCE_IDS" != "None" ]; then
-  aws ec2 terminate-instances --instance-ids $INSTANCE_IDS --region ${safeRegion}
+INSTANCE_IDS=$(printf '%s\\n%s\\n' "$TAGGED_INSTANCE_IDS" "$SPOT_INSTANCE_IDS" | tr '\\t ' '\\n' | grep -v -E '^($|None)$' | sort -u | tr '\\n' ' ')
+if [ -n "$(printf '%s' "$INSTANCE_IDS" | tr -d '[:space:]')" ]; then
+  set -- $INSTANCE_IDS
+  aws ec2 terminate-instances --instance-ids "$@" --region ${safeRegion}
 fi`;
 }
 
@@ -471,7 +486,19 @@ export async function runEc2AnsibleTest(options: Ec2TestOptions): Promise<Ansibl
   }
 
   const region = validateAwsRegion(options.region || 'us-east-1');
-  const instanceType = options.instanceType || profile.instanceType;
+  let instanceType: string;
+  try {
+    instanceType = validateEc2InstanceType(options.instanceType || profile.instanceType);
+  } catch (err) {
+    return {
+      passed: false,
+      os: profile.os,
+      arch: 'x86_64',
+      duration_ms: 0,
+      driver: 'ec2',
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 
   // Resolve the AMI for this profile
   let ami: string;

@@ -112,6 +112,12 @@ data "aws_iam_policy_document" "molecule_ec2" {
       variable = "ec2:InstanceType"
       values   = var.allowed_instance_types
     }
+
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:ResourceTag/Project"
+      values   = ["ec2-test-env"]
+    }
   }
 
   statement {
@@ -154,9 +160,21 @@ data "aws_iam_policy_document" "molecule_ec2" {
     actions = [
       "ec2:RequestSpotInstances",
       "ec2:DescribeSpotInstanceRequests",
-      "ec2:CancelSpotInstanceRequests",
     ]
     resources = ["*"]
+  }
+
+  statement {
+    sid       = "CancelProjectSpotRequests"
+    effect    = "Allow"
+    actions   = ["ec2:CancelSpotInstanceRequests"]
+    resources = ["arn:aws:ec2:*:*:spot-instances-request/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:ResourceTag/Project"
+      values   = ["ec2-test-env"]
+    }
   }
 
   # Restrict instance types that can be launched (RunInstances path)
@@ -173,20 +191,10 @@ data "aws_iam_policy_document" "molecule_ec2" {
     }
   }
 
-  # RequestSpotInstances does not expose ec2:InstanceType as a condition key;
-  # require the supported request tag mirror emitted by the generated playbook.
-  statement {
-    sid       = "RestrictSpotInstanceTypes"
-    effect    = "Deny"
-    actions   = ["ec2:RequestSpotInstances"]
-    resources = ["*"]
-
-    condition {
-      test     = "StringNotEquals"
-      variable = "aws:RequestTag/InstanceType"
-      values   = var.allowed_instance_types
-    }
-  }
+  # Do not add a RestrictSpotInstanceTypes deny using aws:RequestTag/InstanceType:
+  # RequestSpotInstances tags are caller-supplied and spoofable. The EC2 driver
+  # validates Spot instance types against the same set as var.allowed_instance_types
+  # before calling RequestSpotInstances.
 
   # Restrict to spot instances only (cost control) — only applies to the
   # RunInstances code path. RequestSpotInstances is inherently spot.
