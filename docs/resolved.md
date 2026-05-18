@@ -111,3 +111,7 @@
 ## ~~INFRA-040: Harden delegated EC2 driver configuration~~
 **Resolved**: 2026-05-17 (commit aaf602c)
 **Description**: Pinned the delegated-driver workflow to `molecule>=26,<27`, changed the generated `amazon.aws.ec2_instance` create task to use `network.assign_public_ip`, added `--spot-max-price` with instance-size-based defaults, and made EC2 instance names include a per-playbook slug/hash so `--all` runs do not reuse the same Name tag within a shared `PROWL_EC2_RUN_ID`.
+
+## ~~INFRA-041: Provision EC2 tests with supported Spot module~~
+**Resolved**: 2026-05-17 (commit 2e92f7b)
+**Description**: Updated the delegated EC2 create playbook to request test hosts with `amazon.aws.ec2_spot_instance` instead of passing Spot market options to `amazon.aws.ec2_instance`. The create flow now waits for Spot fulfillment, reads and tags the launched instance, records the Spot request ID in Molecule instance config, and destroys via `amazon.aws.ec2_spot_instance` with `terminate_instances: true`.
