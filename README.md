@@ -26,6 +26,30 @@ npm install
 npm run dev    # starts on http://localhost:3004
 ```
 
+## Prowl Infra Test CLI
+
+This repo also publishes a standalone CLI for testing playbooks. Install it
+globally to run `prowl-infra test ...` from anywhere:
+
+```bash
+npm install -g @prowl-qa/infra-cli
+prowl-infra test path/to/playbook.yml
+```
+
+The CLI source lives in [`cli/`](cli) and is published as
+[`@prowl-qa/infra-cli`](https://www.npmjs.com/package/@prowl-qa/infra-cli).
+See [`cli/README.md`](cli/README.md) for usage details and
+[`docs/ec2-testing.md`](docs/ec2-testing.md) (when published) for the EC2 driver
+walkthrough.
+
+To bundle the CLI locally for verification:
+
+```bash
+npm run build:cli                 # → cli/dist/cli.js
+node cli/dist/cli.js --help       # smoke test
+cd cli && npm pack --dry-run      # verify publish tarball contents
+```
+
 ## API Endpoints
 
 | Endpoint | Description |
