@@ -103,3 +103,7 @@
 ## ~~INFRA-038: Redact JSON-quoted secret keys~~
 **Resolved**: 2026-05-10 (commit d52389a)
 **Description**: Updated Molecule EC2 output redaction so JSON-style quoted secret keys such as `"password"` and `"token"` are masked before reaching CI logs or JSON error output. Added regression coverage for JSON-formatted credential output in `tests/ansible-ec2.test.ts`.
+
+## ~~INFRA-039: Pin EC2 test AWS dependencies~~
+**Resolved**: 2026-05-17 (commit faa20cc)
+**Description**: Updated `.github/workflows/test-playbook-ec2.yml` to pin the primary EC2 test stack: `molecule>=5,<6`, `molecule-plugins[ec2]==23.5.3`, `ansible-core>=2.15,<2.18`, `boto3==1.34.131`, `botocore==1.34.131`, `amazon.aws:==7.5.0`, and `community.aws:==7.2.0`. The Molecule pins restore bundled EC2 driver auto-wiring for `create.yml` / `destroy.yml`, which is the root fix for the missing `create.yml` failure, while the AWS SDK and collection pins avoid floating installs in CI.
