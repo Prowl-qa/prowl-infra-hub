@@ -14,7 +14,8 @@
     "test:playbook": "npx tsx cli/index.ts test",
     "test:playbook:all": "npx tsx cli/index.ts test --all",
     "test:playbook:ec2": "npx tsx cli/index.ts test --driver ec2",
-    "test:playbook:ec2:all": "npx tsx cli/index.ts test --all --driver ec2 --env all"
+    "test:playbook:ec2:all": "npx tsx cli/index.ts test --all --driver ec2 --env all",
+    "build:cli": "esbuild cli/index.ts --bundle --platform=node --target=node20 --outfile=cli/dist/cli.js && chmod +x cli/dist/cli.js"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.1",
@@ -29,6 +30,7 @@
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "drizzle-kit": "^0.31.10",
+    "esbuild": "^0.28.0",
     "eslint": "^9.38.0",
     "eslint-config-next": "16.1.6",
     "typescript": "^5.9.3"
