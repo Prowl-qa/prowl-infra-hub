@@ -8,6 +8,7 @@ import {
   getEc2SpotMaxPrice,
   getInstanceName,
   getTerminateTaggedEc2InstancesFallbackCommand,
+  validateAwsRegion,
 } from '../cli/drivers/ansible-ec2.ts';
 import { extractAnsibleTasksForInclude } from '../cli/drivers/ansible.ts';
 import { updatePlaybookYamlContent } from '../cli/playbook-metadata.ts';
@@ -140,6 +141,20 @@ test('getTerminateTaggedEc2InstancesFallbackCommand keeps instance ids attached 
   assert.doesNotMatch(command, /xargs/);
 });
 
+test('validateAwsRegion accepts standard and GovCloud region names', () => {
+  assert.equal(validateAwsRegion('us-east-1'), 'us-east-1');
+  assert.equal(validateAwsRegion('us-gov-west-1'), 'us-gov-west-1');
+});
+
+test('validateAwsRegion rejects invalid or unsafe region strings', () => {
+  assert.throws(() => validateAwsRegion('bad_region'), /Invalid AWS region/);
+  assert.throws(() => validateAwsRegion('us-east-1; echo pwned'), /Invalid AWS region/);
+  assert.throws(
+    () => getTerminateTaggedEc2InstancesFallbackCommand('ubuntu-2204', 'us-east-1; echo pwned', 'run-123'),
+    /Invalid AWS region/
+  );
+});
+
 test('getInstanceName stays unique for playbooks in the same run and environment', () => {
   const profile = ENVIRONMENT_PROFILES['ubuntu-2204'];
   const first = getInstanceName(profile, 'run-123', 'patching/update-packages.yml');
@@ -175,6 +190,21 @@ test('getCreatePlaybook uses the supported Spot module and spot max price', () =
   assert.match(playbook, /spot_price: "0\.12"/);
   assert.match(playbook, /spot_instance_request_ids:/);
   assert.match(playbook, /Write provisional spot request config for Molecule cleanup/);
+  assert.match(playbook, /deadline=\$\(\(SECONDS \+ 300\)\)/);
+  assert.match(playbook, /describe-spot-instance-requests --spot-instance-request-ids "\$request_id"/);
+  assert.match(playbook, /capacity-not-available/);
+  assert.doesNotMatch(playbook, /spot-instance-request-fulfilled/);
+  assert.throws(
+    () => getCreatePlaybook('ami-1234567890abcdef0', profile, 'm6i.large', {
+      playbookPath: 'patching/update-packages.yml',
+      envProfile: 'ubuntu-2204',
+      subnetId: 'subnet-123',
+      securityGroupId: 'sg-123',
+      keyPairName: 'test-key',
+      sshKeyPath: '/tmp/test-key.pem',
+    }, 'run-123', 'us-east-1; echo pwned'),
+    /Invalid AWS region/
+  );
 });
 
 test('extractPlaybookBlock stops before the next top-level YAML key', () => {
