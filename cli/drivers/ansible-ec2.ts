@@ -166,37 +166,30 @@ function resolveAmi(profile: EnvironmentProfile, region: string): string {
 // Molecule config generation
 // ---------------------------------------------------------------------------
 
+function getInstanceName(profile: EnvironmentProfile, testRunId: string): string {
+  // Deterministic per-run name so create and destroy reference the same host.
+  return `prowl-test-${profile.os}-${testRunId}`;
+}
+
 function getEc2MoleculeYaml(
-  ami: string,
   profile: EnvironmentProfile,
-  instanceType: string,
-  convergeFile: string,
   options: Ec2TestOptions,
-  testRunId: string
+  testRunId: string,
+  createFile: string,
+  destroyFile: string,
+  convergeFile: string,
 ): string {
-  const timestamp = Date.now();
+  // Modern Molecule (6.x / 25.x) dropped bundled driver playbooks; the old
+  // `driver.name: ec2` from molecule-plugins is no longer functional. Use
+  // the delegated driver and supply our own create / destroy playbooks
+  // backed by the amazon.aws collection.
   return `---
 dependency:
   name: galaxy
 driver:
-  name: ec2
+  name: delegated
 platforms:
-  - name: prowl-test-${profile.os}-${timestamp}
-    image: ${ami}
-    instance_type: ${instanceType}
-    vpc_subnet_id: ${options.subnetId}
-    security_groups:
-      - ${options.securityGroupId}
-    key_name: ${options.keyPairName}
-    assign_public_ip: true
-    spot_instances: true
-    spot_max_price: "0.02"
-    instance_tags:
-      prowl-test: "true"
-      Project: ${EC2_TEST_PROJECT_TAG}
-      RunId: ${testRunId}
-      managed-by: molecule
-      environment: ${options.envProfile}
+  - name: ${getInstanceName(profile, testRunId)}
 provisioner:
   name: ansible
   connection_options:
@@ -204,9 +197,116 @@ provisioner:
     ansible_ssh_private_key_file: ${options.sshKeyPath}
     ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
   playbooks:
+    create: ${createFile}
+    destroy: ${destroyFile}
     converge: ${convergeFile}
 verifier:
   name: ansible
+`;
+}
+
+function getCreatePlaybook(
+  ami: string,
+  profile: EnvironmentProfile,
+  instanceType: string,
+  options: Ec2TestOptions,
+  testRunId: string,
+  region: string,
+): string {
+  const instanceName = getInstanceName(profile, testRunId);
+  return `---
+- name: Create EC2 test instance
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Launch spot instance ${instanceName}
+      amazon.aws.ec2_instance:
+        name: ${instanceName}
+        image_id: ${ami}
+        instance_type: ${instanceType}
+        vpc_subnet_id: ${options.subnetId}
+        security_group: ${options.securityGroupId}
+        key_name: ${options.keyPairName}
+        network_interfaces:
+          - assign_public_ip: true
+        wait: true
+        wait_timeout: 600
+        state: started
+        region: ${region}
+        instance_market_options:
+          market_type: spot
+          spot_options:
+            max_price: "0.02"
+            spot_instance_type: one-time
+        tags:
+          prowl-test: "true"
+          Project: ${EC2_TEST_PROJECT_TAG}
+          RunId: "${testRunId}"
+          managed-by: molecule
+          environment: ${options.envProfile}
+          Name: ${instanceName}
+      register: ec2_result
+
+    - name: Wait for SSH on launched instance
+      ansible.builtin.wait_for:
+        host: "{{ ec2_result.instances[0].public_ip_address }}"
+        port: 22
+        delay: 15
+        timeout: 320
+
+    - name: Write instance config for Molecule
+      ansible.builtin.copy:
+        dest: "{{ molecule_instance_config }}"
+        mode: "0644"
+        content: |
+          - instance: ${instanceName}
+            address: {{ ec2_result.instances[0].public_ip_address }}
+            user: ${profile.sshUser}
+            port: 22
+            identity_file: ${options.sshKeyPath}
+            instance_ids:
+              - {{ ec2_result.instances[0].instance_id }}
+`;
+}
+
+function getDestroyPlaybook(region: string): string {
+  return `---
+- name: Destroy EC2 test instance
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Check instance config exists
+      ansible.builtin.stat:
+        path: "{{ molecule_instance_config }}"
+      register: instance_config_stat
+
+    - name: Load instance config
+      ansible.builtin.set_fact:
+        instance_config: "{{ lookup('file', molecule_instance_config) | from_yaml }}"
+      when: instance_config_stat.stat.exists
+
+    - name: Collect instance ids to terminate
+      ansible.builtin.set_fact:
+        instance_ids_to_terminate: "{{ instance_config | map(attribute='instance_ids') | flatten | list }}"
+      when: instance_config_stat.stat.exists
+
+    - name: Terminate launched instances
+      amazon.aws.ec2_instance:
+        instance_ids: "{{ instance_ids_to_terminate }}"
+        state: terminated
+        wait: false
+        region: ${region}
+      when:
+        - instance_config_stat.stat.exists
+        - instance_ids_to_terminate | length > 0
+
+    - name: Remove instance config
+      ansible.builtin.file:
+        path: "{{ molecule_instance_config }}"
+        state: absent
+      when: instance_config_stat.stat.exists
 `;
 }
 
@@ -218,7 +318,7 @@ function getConvergePlaybook(playbookPath: string): string {
   tasks:
     - name: Include playbook under test
       ansible.builtin.include_tasks: ${playbookPath}
-  `;
+`;
 }
 
 export function getTerminateTaggedEc2InstancesFallbackCommand(
@@ -300,12 +400,18 @@ export async function runEc2AnsibleTest(options: Ec2TestOptions): Promise<Ansibl
       const convergeFile = path.join(tmpDir, 'converge.yml');
       await fs.writeFile(convergeFile, getConvergePlaybook(tasksFile));
 
+      // Write create / destroy playbooks (Molecule delegated driver)
+      const createFile = path.join(tmpDir, 'create.yml');
+      const destroyFile = path.join(tmpDir, 'destroy.yml');
+      await fs.writeFile(createFile, getCreatePlaybook(ami, profile, instanceType, options, testRunId, region));
+      await fs.writeFile(destroyFile, getDestroyPlaybook(region));
+
       // Write Molecule config
       const moleculeDir = path.join(tmpDir, 'molecule', 'default');
       await fs.mkdir(moleculeDir, { recursive: true });
       await fs.writeFile(
         path.join(moleculeDir, 'molecule.yml'),
-        getEc2MoleculeYaml(ami, profile, instanceType, convergeFile, options, testRunId)
+        getEc2MoleculeYaml(profile, options, testRunId, createFile, destroyFile, convergeFile)
       );
     } catch (err) {
       return {
