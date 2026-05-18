@@ -123,3 +123,7 @@
 ## ~~INFRA-043: Bound Spot wait and validate AWS region~~
 **Resolved**: 2026-05-17 (commit 285e1f5)
 **Description**: Updated delegated EC2 provisioning to validate AWS regions before interpolating them into AWS CLI commands, replaced the unbounded `aws ec2 wait spot-instance-request-fulfilled` waiter with an explicit 5-minute polling loop that fails fast on terminal Spot request states and prints describe output, and corrected the delegated workflow Molecule pin to `molecule>=6,<7`.
+
+## ~~INFRA-044: Wait through non-terminal Spot request status codes~~
+**Resolved**: 2026-05-17 (commit c9e52fb)
+**Description**: Updated the delegated EC2 Spot fulfillment loop so transient non-terminal status codes such as capacity or pricing constraints do not fail scheduled tests before the 5-minute deadline. The loop now fails early only for terminal Spot request states (`failed`, `closed`, or `cancelled`) while continuing to poll open requests.
