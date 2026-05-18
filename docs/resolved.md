@@ -127,3 +127,7 @@
 ## ~~INFRA-044: Wait through non-terminal Spot request status codes~~
 **Resolved**: 2026-05-17 (commit c9e52fb)
 **Description**: Updated the delegated EC2 Spot fulfillment loop so transient non-terminal status codes such as capacity or pricing constraints do not fail scheduled tests before the 5-minute deadline. The loop now fails early only for terminal Spot request states (`failed`, `closed`, or `cancelled`) while continuing to poll open requests.
+
+## ~~INFRA-045: Accept AWS partition region names~~
+**Resolved**: 2026-05-17 (commit 7c3922e)
+**Description**: Broadened EC2 driver region validation so valid AWS partition region names such as `us-iso-east-1`, `us-isob-east-1`, `eu-isoe-west-1`, `us-isof-south-1`, and `eusc-de-east-1` are accepted before AWS CLI calls, while unsafe characters and malformed region strings still fail validation.
