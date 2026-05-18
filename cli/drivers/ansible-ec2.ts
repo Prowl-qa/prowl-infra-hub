@@ -9,7 +9,7 @@ import { extractAnsibleTasksForInclude, type AnsibleTestResult } from './ansible
 const EC2_TEST_PROJECT_TAG = 'ec2-test-env';
 const MOLECULE_MAX_BUFFER = 10 * 1024 * 1024;
 const MOLECULE_ERROR_LOG_LIMIT = 10_000;
-const AWS_REGION_PATTERN = /^[a-z]{2}-(?:gov-)?[a-z]+-\d+$/;
+const AWS_REGION_PATTERN = /^[a-z]{2,4}(?:-[a-z0-9]+)+-\d+$/;
 
 // ---------------------------------------------------------------------------
 // Environment profiles — full OS + Python + security configurations matching
