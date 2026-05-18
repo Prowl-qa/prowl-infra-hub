@@ -87,7 +87,7 @@ jobs:
         # bundled EC2 driver playbooks anyway.
         run: |
           pip install \
-            molecule \
+            'molecule>=26,<27' \
             'ansible-core>=2.15,<2.18' \
             'boto3==1.34.131' \
             'botocore==1.34.131'
