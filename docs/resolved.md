@@ -143,3 +143,7 @@
 ## ~~INFRA-048: Use EC2 network syntax supported by pinned collection~~
 **Resolved**: 2026-05-18 (commit 104a277)
 **Description**: Updated the generated `amazon.aws.ec2_instance` Spot launch task to use the `network.assign_public_ip` shape supported by the pinned `amazon.aws:==7.5.0` collection instead of `network_interfaces`, which requires newer collection versions. Added generator coverage to ensure `network_interfaces` is not emitted for this CI path.
+
+## ~~INFRA-049: Persist EC2 instance metadata before SSH wait~~
+**Resolved**: 2026-05-18 (commit 3fa76ce)
+**Description**: Moved the generated Molecule instance config write ahead of the SSH readiness check so `destroy.yml` can still read the launched instance ID and terminate it if `ansible.builtin.wait_for` fails during boot, networking, or security group readiness. Added generator coverage to keep the metadata write before the SSH wait task.
