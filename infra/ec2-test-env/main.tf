@@ -96,10 +96,16 @@ data "aws_iam_policy_document" "molecule_ec2" {
   }
 
   statement {
-    sid       = "EC2TagProjectInstances"
-    effect    = "Allow"
-    actions   = ["ec2:CreateTags"]
-    resources = ["arn:aws:ec2:*:*:instance/*"]
+    sid     = "EC2TagProjectInstances"
+    effect  = "Allow"
+    actions = ["ec2:CreateTags"]
+    # Covers both instances (launch-time tagging from RunInstances or
+    # post-launch ec2_tag) and spot-instance requests (tags set in the
+    # ec2_spot_instance launch_specification).
+    resources = [
+      "arn:aws:ec2:*:*:instance/*",
+      "arn:aws:ec2:*:*:spot-instances-request/*",
+    ]
 
     condition {
       test     = "StringEquals"
@@ -108,21 +114,29 @@ data "aws_iam_policy_document" "molecule_ec2" {
     }
 
     condition {
-      test     = "StringEquals"
-      variable = "ec2:CreateAction"
-      values   = ["RunInstances"]
-    }
-
-    condition {
       test     = "ForAllValues:StringEquals"
       variable = "aws:TagKeys"
       # "Name" is set by amazon.aws.ec2_instance's `name:` parameter, which
       # we use to identify each Molecule test instance.
-      values   = ["Project", "RunId", "environment", "managed-by", "prowl-test", "Name"]
+      values = ["Project", "RunId", "environment", "managed-by", "prowl-test", "Name"]
     }
   }
 
-  # Restrict instance types that can be launched
+  # Spot instance request lifecycle. amazon.aws.ec2_spot_instance calls
+  # RequestSpotInstances, then we describe to wait for fulfillment, and
+  # finally cancel on test teardown.
+  statement {
+    sid    = "AllowSpotApi"
+    effect = "Allow"
+    actions = [
+      "ec2:RequestSpotInstances",
+      "ec2:DescribeSpotInstanceRequests",
+      "ec2:CancelSpotInstanceRequests",
+    ]
+    resources = ["*"]
+  }
+
+  # Restrict instance types that can be launched (RunInstances path)
   statement {
     sid       = "RestrictInstanceTypes"
     effect    = "Deny"
@@ -136,7 +150,22 @@ data "aws_iam_policy_document" "molecule_ec2" {
     }
   }
 
-  # Restrict to spot instances only (cost control)
+  # Same instance-type restriction for the RequestSpotInstances code path.
+  statement {
+    sid       = "RestrictSpotInstanceTypes"
+    effect    = "Deny"
+    actions   = ["ec2:RequestSpotInstances"]
+    resources = ["*"]
+
+    condition {
+      test     = "ForAnyValue:StringNotEquals"
+      variable = "ec2:InstanceType"
+      values   = var.allowed_instance_types
+    }
+  }
+
+  # Restrict to spot instances only (cost control) — only applies to the
+  # RunInstances code path. RequestSpotInstances is inherently spot.
   statement {
     sid       = "RequireSpotInstances"
     effect    = "Deny"
