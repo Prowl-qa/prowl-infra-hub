@@ -151,3 +151,7 @@
 ## ~~INFRA-050: Launch EC2 tests with Spot instance module~~
 **Resolved**: 2026-05-18 (commit f9c2944)
 **Description**: Updated the generated EC2 create playbook to request Spot capacity with `amazon.aws.ec2_spot_instance` instead of unsupported Spot parameters on `amazon.aws.ec2_instance`. The launch specification now uses `network_interfaces` with subnet, security group, and public-IP assignment fields, persists Spot request metadata before fulfillment waits, records the launched instance ID before SSH readiness, and destroys via `ec2_spot_instance` with `terminate_instances: true`.
+
+## ~~INFRA-051: Constrain EC2 Spot IAM tagging and type guard~~
+**Resolved**: 2026-05-18 (commit 6c2d502)
+**Description**: Reinstated launch-only `ec2:CreateTags` constraints with `ec2:CreateAction`, replaced the unsupported `ec2:InstanceType` condition on `RequestSpotInstances` with the supported `aws:RequestTag/InstanceType` mirror emitted by `cli/drivers/ansible-ec2.ts`, removed post-launch instance tagging, and updated fallback cleanup to terminate instances found through tagged Spot requests.
