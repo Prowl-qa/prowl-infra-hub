@@ -299,14 +299,13 @@ export function getCreatePlaybook(
         while [ "$SECONDS" -lt "$deadline" ]; do
           request_json=$(aws ec2 describe-spot-instance-requests --spot-instance-request-ids "$request_id" --region ${safeRegion})
           state=$(printf '%s' "$request_json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["SpotInstanceRequests"][0].get("State", ""))')
-          status_code=$(printf '%s' "$request_json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["SpotInstanceRequests"][0].get("Status", {}).get("Code", ""))')
 
           if [ "$state" = "active" ]; then
             exit 0
           fi
 
-          case "$state:$status_code" in
-            failed:*|closed:*|cancelled:*|*:price-too-low|*:capacity-not-available|*:constraint-not-fulfillable|*:bad-parameters)
+          case "$state" in
+            failed|closed|cancelled)
               printf '%s\n' "$request_json" >&2
               exit 1
               ;;

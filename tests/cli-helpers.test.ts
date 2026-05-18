@@ -192,7 +192,9 @@ test('getCreatePlaybook uses the supported Spot module and spot max price', () =
   assert.match(playbook, /Write provisional spot request config for Molecule cleanup/);
   assert.match(playbook, /deadline=\$\(\(SECONDS \+ 300\)\)/);
   assert.match(playbook, /describe-spot-instance-requests --spot-instance-request-ids "\$request_id"/);
-  assert.match(playbook, /capacity-not-available/);
+  assert.doesNotMatch(playbook, /\*:price-too-low/);
+  assert.doesNotMatch(playbook, /\*:capacity-not-available/);
+  assert.doesNotMatch(playbook, /\*:constraint-not-fulfillable/);
   assert.doesNotMatch(playbook, /spot-instance-request-fulfilled/);
   assert.throws(
     () => getCreatePlaybook('ami-1234567890abcdef0', profile, 'm6i.large', {
