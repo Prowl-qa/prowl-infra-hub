@@ -211,14 +211,14 @@ function getEc2MoleculeYaml(
   convergeFile: string,
 ): string {
   // Modern Molecule (6.x / 25.x) dropped bundled driver playbooks; the old
-  // `driver.name: ec2` from molecule-plugins is no longer functional. Use
-  // the delegated driver and supply our own create / destroy playbooks
-  // backed by the amazon.aws collection.
+  // `driver.name: ec2` from molecule-plugins is no longer functional, and
+  // `delegated` was renamed to `default` in core. Use `default` and supply
+  // our own create / destroy playbooks backed by the amazon.aws collection.
   return `---
 dependency:
   name: galaxy
 driver:
-  name: delegated
+  name: default
 platforms:
   - name: ${getInstanceName(profile, testRunId, options.playbookPath)}
 provisioner:
