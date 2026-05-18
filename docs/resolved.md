@@ -103,3 +103,7 @@
 ## ~~INFRA-038: Redact JSON-quoted secret keys~~
 **Resolved**: 2026-05-10 (commit d52389a)
 **Description**: Updated Molecule EC2 output redaction so JSON-style quoted secret keys such as `"password"` and `"token"` are masked before reaching CI logs or JSON error output. Added regression coverage for JSON-formatted credential output in `tests/ansible-ec2.test.ts`.
+
+## ~~INFRA-039: Pin EC2 test AWS dependencies~~
+**Resolved**: 2026-05-17 (commit faa20cc)
+**Description**: Updated `.github/workflows/test-playbook-ec2.yml` to pin `boto3`, `botocore`, `amazon.aws`, and `community.aws` for reproducible Molecule EC2 runs. The selected versions keep the existing `ansible-core>=2.15,<2.18` range and avoid floating AWS SDK or collection installs in CI.
