@@ -265,8 +265,8 @@ export function getCreatePlaybook(
         vpc_subnet_id: ${options.subnetId}
         security_group: ${options.securityGroupId}
         key_name: ${options.keyPairName}
-        network_interfaces:
-          - assign_public_ip: true
+        network:
+          assign_public_ip: true
         state: started
         wait: true
         wait_timeout: 600
