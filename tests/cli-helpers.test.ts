@@ -200,6 +200,10 @@ test('getCreatePlaybook launches a spot instance via ec2_instance market_options
   assert.match(playbook, /instance_interruption_behavior: terminate/);
   assert.match(playbook, /network:\n\s+assign_public_ip: true/);
   assert.doesNotMatch(playbook, /network_interfaces:/);
+  assert.ok(
+    playbook.indexOf('Write instance config for Molecule') < playbook.indexOf('Wait for SSH on launched instance'),
+    'instance config must be written before SSH wait can fail'
+  );
   // Atomic launch-and-tag — required tags must all be present.
   assert.match(playbook, /Project: ec2-test-env/);
   assert.match(playbook, /RunId: "run-123"/);

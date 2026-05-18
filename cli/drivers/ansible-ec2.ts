@@ -285,13 +285,6 @@ export function getCreatePlaybook(
           environment: ${options.envProfile}
       register: ec2_result
 
-    - name: Wait for SSH on launched instance
-      ansible.builtin.wait_for:
-        host: "{{ ec2_result.instances[0].public_ip_address }}"
-        port: 22
-        delay: 15
-        timeout: 320
-
     - name: Write instance config for Molecule
       ansible.builtin.copy:
         dest: "{{ molecule_instance_config }}"
@@ -304,6 +297,13 @@ export function getCreatePlaybook(
             identity_file: ${options.sshKeyPath}
             instance_ids:
               - {{ ec2_result.instances[0].instance_id }}
+
+    - name: Wait for SSH on launched instance
+      ansible.builtin.wait_for:
+        host: "{{ ec2_result.instances[0].public_ip_address }}"
+        port: 22
+        delay: 15
+        timeout: 320
 `;
 }
 
