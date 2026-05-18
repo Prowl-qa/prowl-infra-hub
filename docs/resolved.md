@@ -107,3 +107,7 @@
 ## ~~INFRA-039: Pin EC2 test AWS dependencies~~
 **Resolved**: 2026-05-17 (commit faa20cc)
 **Description**: Updated `.github/workflows/test-playbook-ec2.yml` to pin the primary EC2 test stack: `molecule>=5,<6`, `molecule-plugins[ec2]==23.5.3`, `ansible-core>=2.15,<2.18`, `boto3==1.34.131`, `botocore==1.34.131`, `amazon.aws:==7.5.0`, and `community.aws:==7.2.0`. The Molecule pins restore bundled EC2 driver auto-wiring for `create.yml` / `destroy.yml`, which is the root fix for the missing `create.yml` failure, while the AWS SDK and collection pins avoid floating installs in CI.
+
+## ~~INFRA-040: Harden delegated EC2 driver configuration~~
+**Resolved**: 2026-05-17 (commit aaf602c)
+**Description**: Pinned the delegated-driver workflow to `molecule>=26,<27`, changed the generated `amazon.aws.ec2_instance` create task to use `network.assign_public_ip`, added `--spot-max-price` with instance-size-based defaults, and made EC2 instance names include a per-playbook slug/hash so `--all` runs do not reuse the same Name tag within a shared `PROWL_EC2_RUN_ID`.
