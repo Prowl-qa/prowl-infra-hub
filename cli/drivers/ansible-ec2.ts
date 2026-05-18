@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -111,6 +111,7 @@ export interface Ec2TestOptions {
   securityGroupId: string;
   keyPairName: string;
   sshKeyPath: string;
+  maxPrice?: string;
 }
 
 export function extractPlaybookBlock(content: string): string | null {
@@ -166,9 +167,29 @@ function resolveAmi(profile: EnvironmentProfile, region: string): string {
 // Molecule config generation
 // ---------------------------------------------------------------------------
 
-function getInstanceName(profile: EnvironmentProfile, testRunId: string): string {
-  // Deterministic per-run name so create and destroy reference the same host.
-  return `prowl-test-${profile.os}-${testRunId}`;
+export function getEc2SpotMaxPrice(instanceType: string, maxPrice?: string): string {
+  if (maxPrice?.trim()) return maxPrice.trim();
+
+  const [, size = 'small'] = instanceType.split('.');
+  const defaultPrices: Record<string, string> = {
+    nano: '0.01',
+    micro: '0.02',
+    small: '0.04',
+    medium: '0.08',
+    large: '0.16',
+    xlarge: '0.32',
+    '2xlarge': '0.64',
+  };
+
+  return defaultPrices[size] ?? '0.20';
+}
+
+export function getInstanceName(profile: EnvironmentProfile, testRunId: string, playbookPath: string): string {
+  const basename = path.basename(playbookPath, path.extname(playbookPath));
+  const slug = basename.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) || 'playbook';
+  const hash = createHash('sha1').update(path.resolve(playbookPath)).digest('hex').slice(0, 8);
+
+  return `prowl-test-${profile.os}-${slug}-${hash}-${testRunId}`;
 }
 
 function getEc2MoleculeYaml(
@@ -189,7 +210,7 @@ dependency:
 driver:
   name: delegated
 platforms:
-  - name: ${getInstanceName(profile, testRunId)}
+  - name: ${getInstanceName(profile, testRunId, options.playbookPath)}
 provisioner:
   name: ansible
   connection_options:
@@ -205,7 +226,7 @@ verifier:
 `;
 }
 
-function getCreatePlaybook(
+export function getCreatePlaybook(
   ami: string,
   profile: EnvironmentProfile,
   instanceType: string,
@@ -213,7 +234,8 @@ function getCreatePlaybook(
   testRunId: string,
   region: string,
 ): string {
-  const instanceName = getInstanceName(profile, testRunId);
+  const instanceName = getInstanceName(profile, testRunId, options.playbookPath);
+  const spotMaxPrice = getEc2SpotMaxPrice(instanceType, options.maxPrice);
   return `---
 - name: Create EC2 test instance
   hosts: localhost
@@ -228,8 +250,8 @@ function getCreatePlaybook(
         vpc_subnet_id: ${options.subnetId}
         security_group: ${options.securityGroupId}
         key_name: ${options.keyPairName}
-        network_interfaces:
-          - assign_public_ip: true
+        network:
+          assign_public_ip: true
         wait: true
         wait_timeout: 600
         state: started
@@ -237,7 +259,7 @@ function getCreatePlaybook(
         instance_market_options:
           market_type: spot
           spot_options:
-            max_price: "0.02"
+            max_price: "${spotMaxPrice}"
             spot_instance_type: one-time
         tags:
           prowl-test: "true"
