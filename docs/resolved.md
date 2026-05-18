@@ -151,3 +151,15 @@
 ## ~~INFRA-050: Launch EC2 tests with Spot instance module~~
 **Resolved**: 2026-05-18 (commit f9c2944)
 **Description**: Updated the generated EC2 create playbook to request Spot capacity with `amazon.aws.ec2_spot_instance` instead of unsupported Spot parameters on `amazon.aws.ec2_instance`. The launch specification now uses `network_interfaces` with subnet, security group, and public-IP assignment fields, persists Spot request metadata before fulfillment waits, records the launched instance ID before SSH readiness, and destroys via `ec2_spot_instance` with `terminate_instances: true`.
+
+## ~~INFRA-051: Constrain EC2 Spot IAM tagging and type guard~~
+**Resolved**: 2026-05-18 (commit 6c2d502)
+**Description**: Reinstated launch-only `ec2:CreateTags` constraints with `ec2:CreateAction`, replaced the unsupported `ec2:InstanceType` condition on `RequestSpotInstances` with the supported `aws:RequestTag/InstanceType` mirror emitted by `cli/drivers/ansible-ec2.ts`, removed post-launch instance tagging, and updated fallback cleanup to terminate instances found through tagged Spot requests.
+
+## ~~INFRA-052: Scope EC2 Spot cleanup permissions~~
+**Resolved**: 2026-05-18 (commit 22401ab)
+**Description**: Re-added the `ec2:ResourceTag/Project` guard to Spot termination permissions, split `ec2:CancelSpotInstanceRequests` into a project-tagged Spot request resource statement, moved Spot instance-type enforcement out of spoofable `aws:RequestTag/InstanceType` IAM conditions and into `cli/drivers/ansible-ec2.ts` caller validation, and hardened fallback cleanup so empty ID output cannot invoke `terminate-instances`.
+
+## ~~INFRA-053: Launch Spot instances with instance tags before cleanup~~
+**Resolved**: 2026-05-18 (commit ff919f6)
+**Description**: Updated `cli/drivers/ansible-ec2.ts` to launch Spot capacity through `RunInstances` with launch-time tag specifications for both the EC2 instance and Spot request, keeping `ec2:CreateTags` guarded by `ec2:CreateAction=RunInstances` while ensuring tag-scoped termination can clean up fulfilled instances. Removed the legacy `EC2TerminateProjectInstances` IAM statement so only the spot/type/project-scoped termination rule remains.

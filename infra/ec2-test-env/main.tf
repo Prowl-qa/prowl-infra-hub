@@ -83,10 +83,22 @@ data "aws_iam_policy_document" "molecule_ec2" {
   }
 
   statement {
-    sid       = "EC2TerminateProjectInstances"
+    sid       = "EC2TerminateAllowedSpotInstances"
     effect    = "Allow"
     actions   = ["ec2:TerminateInstances"]
     resources = ["arn:aws:ec2:*:*:instance/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:InstanceMarketType"
+      values   = ["spot"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:InstanceType"
+      values   = var.allowed_instance_types
+    }
 
     condition {
       test     = "StringEquals"
@@ -96,10 +108,16 @@ data "aws_iam_policy_document" "molecule_ec2" {
   }
 
   statement {
-    sid       = "EC2TagProjectInstances"
-    effect    = "Allow"
-    actions   = ["ec2:CreateTags"]
-    resources = ["arn:aws:ec2:*:*:instance/*"]
+    sid     = "EC2TagProjectResourcesOnCreate"
+    effect  = "Allow"
+    actions = ["ec2:CreateTags"]
+    # Tag only during resource creation. This prevents the role from
+    # retagging arbitrary existing instances as Project=ec2-test-env and
+    # then terminating them through tag-scoped cleanup permissions.
+    resources = [
+      "arn:aws:ec2:*:*:instance/*",
+      "arn:aws:ec2:*:*:spot-instances-request/*",
+    ]
 
     condition {
       test     = "StringEquals"
@@ -116,13 +134,36 @@ data "aws_iam_policy_document" "molecule_ec2" {
     condition {
       test     = "ForAllValues:StringEquals"
       variable = "aws:TagKeys"
-      # "Name" is set by amazon.aws.ec2_instance's `name:` parameter, which
-      # we use to identify each Molecule test instance.
-      values   = ["Project", "RunId", "environment", "managed-by", "prowl-test", "Name"]
+      values   = ["Project", "RunId", "environment", "managed-by", "prowl-test", "Name", "InstanceType"]
     }
   }
 
-  # Restrict instance types that can be launched
+  # Spot request lifecycle. Launches go through RunInstances with Spot market
+  # options so the RunInstances deny conditions enforce type and spot-only
+  # constraints; cleanup only needs describe/cancel for tagged requests.
+  statement {
+    sid    = "AllowSpotApi"
+    effect = "Allow"
+    actions = [
+      "ec2:DescribeSpotInstanceRequests",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "CancelProjectSpotRequests"
+    effect    = "Allow"
+    actions   = ["ec2:CancelSpotInstanceRequests"]
+    resources = ["arn:aws:ec2:*:*:spot-instances-request/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:ResourceTag/Project"
+      values   = ["ec2-test-env"]
+    }
+  }
+
+  # Restrict instance types that can be launched (RunInstances path)
   statement {
     sid       = "RestrictInstanceTypes"
     effect    = "Deny"
@@ -136,7 +177,12 @@ data "aws_iam_policy_document" "molecule_ec2" {
     }
   }
 
-  # Restrict to spot instances only (cost control)
+  # Do not grant RequestSpotInstances or add a RestrictSpotInstanceTypes deny
+  # using aws:RequestTag/InstanceType. Spot launches use RunInstances with
+  # InstanceMarketOptions, and the EC2 driver also validates instance types
+  # against the same set as var.allowed_instance_types before launch.
+
+  # Restrict to spot instances only (cost control) on the RunInstances path.
   statement {
     sid       = "RequireSpotInstances"
     effect    = "Deny"
