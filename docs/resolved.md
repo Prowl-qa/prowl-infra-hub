@@ -159,3 +159,7 @@
 ## ~~INFRA-052: Scope EC2 Spot cleanup permissions~~
 **Resolved**: 2026-05-18 (commit 22401ab)
 **Description**: Re-added the `ec2:ResourceTag/Project` guard to Spot termination permissions, split `ec2:CancelSpotInstanceRequests` into a project-tagged Spot request resource statement, moved Spot instance-type enforcement out of spoofable `aws:RequestTag/InstanceType` IAM conditions and into `cli/drivers/ansible-ec2.ts` caller validation, and hardened fallback cleanup so empty ID output cannot invoke `terminate-instances`.
+
+## ~~INFRA-053: Launch Spot instances with instance tags before cleanup~~
+**Resolved**: 2026-05-18 (commit ff919f6)
+**Description**: Updated `cli/drivers/ansible-ec2.ts` to launch Spot capacity through `RunInstances` with launch-time tag specifications for both the EC2 instance and Spot request, keeping `ec2:CreateTags` guarded by `ec2:CreateAction=RunInstances` while ensuring tag-scoped termination can clean up fulfilled instances. Removed the legacy `EC2TerminateProjectInstances` IAM statement so only the spot/type/project-scoped termination rule remains.
