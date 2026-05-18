@@ -139,3 +139,15 @@
 ## ~~INFRA-047: Type-check CLI with Node compiler settings~~
 **Resolved**: 2026-05-18 (commit 3e29682)
 **Description**: Added a CLI-local TypeScript config using NodeNext module resolution, ES2022 libs, and Node ambient types so `node:` built-in imports plus `process` and `Buffer` resolve when checking the package outside the Next app config. Wired `cli/package.json` so `prepack` runs the CLI typecheck before building `dist/cli.js`.
+
+## ~~INFRA-048: Use EC2 network syntax supported by pinned collection~~
+**Resolved**: 2026-05-18 (commit 104a277)
+**Description**: Updated the generated `amazon.aws.ec2_instance` Spot launch task to use the `network.assign_public_ip` shape supported by the pinned `amazon.aws:==7.5.0` collection instead of `network_interfaces`, which requires newer collection versions. Added generator coverage to ensure `network_interfaces` is not emitted for this CI path.
+
+## ~~INFRA-049: Persist EC2 instance metadata before SSH wait~~
+**Resolved**: 2026-05-18 (commit 3fa76ce)
+**Description**: Moved the generated Molecule instance config write ahead of the SSH readiness check so `destroy.yml` can still read the launched instance ID and terminate it if `ansible.builtin.wait_for` fails during boot, networking, or security group readiness. Added generator coverage to keep the metadata write before the SSH wait task.
+
+## ~~INFRA-050: Launch EC2 tests with Spot instance module~~
+**Resolved**: 2026-05-18 (commit f9c2944)
+**Description**: Updated the generated EC2 create playbook to request Spot capacity with `amazon.aws.ec2_spot_instance` instead of unsupported Spot parameters on `amazon.aws.ec2_instance`. The launch specification now uses `network_interfaces` with subnet, security group, and public-IP assignment fields, persists Spot request metadata before fulfillment waits, records the launched instance ID before SSH readiness, and destroys via `ec2_spot_instance` with `terminate_instances: true`.
