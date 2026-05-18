@@ -198,7 +198,8 @@ test('getCreatePlaybook launches a spot instance via ec2_instance market_options
   assert.match(playbook, /max_price: "0\.12"/);
   assert.match(playbook, /spot_instance_type: one-time/);
   assert.match(playbook, /instance_interruption_behavior: terminate/);
-  assert.match(playbook, /network_interfaces:\n\s+- assign_public_ip: true/);
+  assert.match(playbook, /network:\n\s+assign_public_ip: true/);
+  assert.doesNotMatch(playbook, /network_interfaces:/);
   // Atomic launch-and-tag — required tags must all be present.
   assert.match(playbook, /Project: ec2-test-env/);
   assert.match(playbook, /RunId: "run-123"/);
