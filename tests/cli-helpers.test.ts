@@ -177,7 +177,7 @@ test('getEc2SpotMaxPrice uses overrides and instance-size defaults', () => {
   assert.equal(getEc2SpotMaxPrice('t3.small', '0.12'), '0.12');
 });
 
-test('getCreatePlaybook launches a spot instance via ec2_instance market_options', () => {
+test('getCreatePlaybook launches a spot instance via ec2_spot_instance', () => {
   const profile = ENVIRONMENT_PROFILES['ubuntu-2204'];
   const playbook = getCreatePlaybook('ami-1234567890abcdef0', profile, 'm6i.large', {
     playbookPath: 'patching/update-packages.yml',
@@ -189,17 +189,21 @@ test('getCreatePlaybook launches a spot instance via ec2_instance market_options
     maxPrice: '0.12',
   }, 'run-123', 'us-east-1');
 
-  // Uses ec2_instance with instance_market_options (single RunInstances
-  // call), not the older ec2_spot_instance / RequestSpotInstances path.
-  assert.match(playbook, /amazon\.aws\.ec2_instance:/);
-  assert.doesNotMatch(playbook, /amazon\.aws\.ec2_spot_instance:/);
-  assert.match(playbook, /name: prowl-test-ubuntu-22\.04-/);
-  assert.match(playbook, /market_type: spot/);
-  assert.match(playbook, /max_price: "0\.12"/);
-  assert.match(playbook, /spot_instance_type: one-time/);
-  assert.match(playbook, /instance_interruption_behavior: terminate/);
-  assert.match(playbook, /network:\n\s+assign_public_ip: true/);
-  assert.doesNotMatch(playbook, /network_interfaces:/);
+  assert.match(playbook, /amazon\.aws\.ec2_spot_instance:/);
+  assert.doesNotMatch(playbook, /amazon\.aws\.ec2_instance:\n\s+name:/);
+  assert.doesNotMatch(playbook, /instance_market_options:/);
+  assert.match(playbook, /spot_price: "0\.12"/);
+  assert.match(playbook, /spot_type: one-time/);
+  assert.match(playbook, /interruption: terminate/);
+  assert.match(playbook, /network_interfaces:\n\s+- associate_public_ip_address: true/);
+  assert.match(playbook, /groups:\n\s+- sg-123/);
+  assert.match(playbook, /subnet_id: subnet-123/);
+  assert.doesNotMatch(playbook, /network:\n\s+assign_public_ip: true/);
+  assert.ok(
+    playbook.indexOf('Write provisional spot request config for Molecule cleanup')
+      < playbook.indexOf('Wait for spot request fulfillment'),
+    'spot request config must be written before fulfillment wait can fail'
+  );
   assert.ok(
     playbook.indexOf('Write instance config for Molecule') < playbook.indexOf('Wait for SSH on launched instance'),
     'instance config must be written before SSH wait can fail'
@@ -208,11 +212,9 @@ test('getCreatePlaybook launches a spot instance via ec2_instance market_options
   assert.match(playbook, /Project: ec2-test-env/);
   assert.match(playbook, /RunId: "run-123"/);
   assert.match(playbook, /prowl-test: "true"/);
-  // No separate spot-request polling or cleanup — one-time spot requests
-  // are auto-cancelled when the instance terminates.
-  assert.doesNotMatch(playbook, /describe-spot-instance-requests/);
-  assert.doesNotMatch(playbook, /spot_instance_request_ids/);
-  assert.doesNotMatch(playbook, /Wait for spot request fulfillment/);
+  assert.match(playbook, /describe-spot-instance-requests/);
+  assert.match(playbook, /spot_instance_request_ids:/);
+  assert.match(playbook, /Wait for spot request fulfillment/);
   assert.throws(
     () => getCreatePlaybook('ami-1234567890abcdef0', profile, 'm6i.large', {
       playbookPath: 'patching/update-packages.yml',
