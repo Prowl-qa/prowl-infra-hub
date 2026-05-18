@@ -139,3 +139,7 @@
 ## ~~INFRA-047: Type-check CLI with Node compiler settings~~
 **Resolved**: 2026-05-18 (commit 3e29682)
 **Description**: Added a CLI-local TypeScript config using NodeNext module resolution, ES2022 libs, and Node ambient types so `node:` built-in imports plus `process` and `Buffer` resolve when checking the package outside the Next app config. Wired `cli/package.json` so `prepack` runs the CLI typecheck before building `dist/cli.js`.
+
+## ~~INFRA-048: Use EC2 network syntax supported by pinned collection~~
+**Resolved**: 2026-05-18 (commit 104a277)
+**Description**: Updated the generated `amazon.aws.ec2_instance` Spot launch task to use the `network.assign_public_ip` shape supported by the pinned `amazon.aws:==7.5.0` collection instead of `network_interfaces`, which requires newer collection versions. Added generator coverage to ensure `network_interfaces` is not emitted for this CI path.
