@@ -156,7 +156,7 @@ test('getEc2SpotMaxPrice uses overrides and instance-size defaults', () => {
   assert.equal(getEc2SpotMaxPrice('t3.small', '0.12'), '0.12');
 });
 
-test('getCreatePlaybook uses delegated EC2 network mapping and spot max price', () => {
+test('getCreatePlaybook uses the supported Spot module and spot max price', () => {
   const profile = ENVIRONMENT_PROFILES['ubuntu-2204'];
   const playbook = getCreatePlaybook('ami-1234567890abcdef0', profile, 'm6i.large', {
     playbookPath: 'patching/update-packages.yml',
@@ -168,9 +168,11 @@ test('getCreatePlaybook uses delegated EC2 network mapping and spot max price', 
     maxPrice: '0.12',
   }, 'run-123', 'us-east-1');
 
-  assert.match(playbook, /network:\n\s+assign_public_ip: true/);
-  assert.doesNotMatch(playbook, /network_interfaces:/);
-  assert.match(playbook, /max_price: "0\.12"/);
+  assert.match(playbook, /amazon\.aws\.ec2_spot_instance:/);
+  assert.doesNotMatch(playbook, /amazon\.aws\.ec2_instance:\n\s+name:/);
+  assert.match(playbook, /network_interfaces:\n\s+- associate_public_ip_address: true/);
+  assert.match(playbook, /spot_price: "0\.12"/);
+  assert.match(playbook, /spot_instance_request_ids:/);
 });
 
 test('extractPlaybookBlock stops before the next top-level YAML key', () => {

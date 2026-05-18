@@ -242,25 +242,24 @@ export function getCreatePlaybook(
   connection: local
   gather_facts: false
   tasks:
-    - name: Launch spot instance ${instanceName}
-      amazon.aws.ec2_instance:
-        name: ${instanceName}
-        image_id: ${ami}
-        instance_type: ${instanceType}
-        vpc_subnet_id: ${options.subnetId}
-        security_group: ${options.securityGroupId}
-        key_name: ${options.keyPairName}
-        network:
-          assign_public_ip: true
-        wait: true
-        wait_timeout: 600
-        state: started
+    - name: Request spot instance ${instanceName}
+      amazon.aws.ec2_spot_instance:
+        launch_specification:
+          image_id: ${ami}
+          instance_type: ${instanceType}
+          key_name: ${options.keyPairName}
+          network_interfaces:
+            - associate_public_ip_address: true
+              delete_on_termination: true
+              device_index: 0
+              groups:
+                - ${options.securityGroupId}
+              subnet_id: ${options.subnetId}
+        spot_price: "${spotMaxPrice}"
+        spot_type: one-time
+        interruption: terminate
+        state: present
         region: ${region}
-        instance_market_options:
-          market_type: spot
-          spot_options:
-            max_price: "${spotMaxPrice}"
-            spot_instance_type: one-time
         tags:
           prowl-test: "true"
           Project: ${EC2_TEST_PROJECT_TAG}
@@ -268,7 +267,48 @@ export function getCreatePlaybook(
           managed-by: molecule
           environment: ${options.envProfile}
           Name: ${instanceName}
+      register: spot_result
+
+    - name: Wait for spot request fulfillment
+      ansible.builtin.command: >
+        aws ec2 wait spot-instance-request-fulfilled
+        --spot-instance-request-ids {{ spot_result.spot_request.spot_instance_request_id }}
+        --region ${region}
+      changed_when: false
+
+    - name: Read launched spot instance id
+      ansible.builtin.command: >
+        aws ec2 describe-spot-instance-requests
+        --spot-instance-request-ids {{ spot_result.spot_request.spot_instance_request_id }}
+        --query 'SpotInstanceRequests[0].InstanceId'
+        --output text
+        --region ${region}
+      register: spot_instance_id
+      changed_when: false
+
+    - name: Tag launched spot instance
+      amazon.aws.ec2_tag:
+        resource: "{{ spot_instance_id.stdout }}"
+        region: ${region}
+        tags:
+          prowl-test: "true"
+          Project: ${EC2_TEST_PROJECT_TAG}
+          RunId: "${testRunId}"
+          managed-by: molecule
+          environment: ${options.envProfile}
+          Name: ${instanceName}
+
+    - name: Read launched spot instance details
+      amazon.aws.ec2_instance_info:
+        instance_ids:
+          - "{{ spot_instance_id.stdout }}"
+        region: ${region}
       register: ec2_result
+      until:
+        - ec2_result.instances | length > 0
+        - ec2_result.instances[0].public_ip_address is defined
+      retries: 30
+      delay: 10
 
     - name: Wait for SSH on launched instance
       ansible.builtin.wait_for:
@@ -287,8 +327,10 @@ export function getCreatePlaybook(
             user: ${profile.sshUser}
             port: 22
             identity_file: ${options.sshKeyPath}
+            spot_instance_request_ids:
+              - {{ spot_result.spot_request.spot_instance_request_id }}
             instance_ids:
-              - {{ ec2_result.instances[0].instance_id }}
+              - {{ spot_instance_id.stdout }}
 `;
 }
 
@@ -314,7 +356,22 @@ function getDestroyPlaybook(region: string): string {
         instance_ids_to_terminate: "{{ instance_config | map(attribute='instance_ids') | flatten | list }}"
       when: instance_config_stat.stat.exists
 
-    - name: Terminate launched instances
+    - name: Collect spot request ids to cancel
+      ansible.builtin.set_fact:
+        spot_request_ids_to_cancel: "{{ instance_config | map(attribute='spot_instance_request_ids') | select('defined') | flatten | list }}"
+      when: instance_config_stat.stat.exists
+
+    - name: Cancel spot requests and terminate associated instances
+      amazon.aws.ec2_spot_instance:
+        spot_instance_request_ids: "{{ spot_request_ids_to_cancel }}"
+        state: absent
+        terminate_instances: true
+        region: ${region}
+      when:
+        - instance_config_stat.stat.exists
+        - spot_request_ids_to_cancel | length > 0
+
+    - name: Terminate launched instances without spot request metadata
       amazon.aws.ec2_instance:
         instance_ids: "{{ instance_ids_to_terminate }}"
         state: terminated
@@ -323,6 +380,7 @@ function getDestroyPlaybook(region: string): string {
       when:
         - instance_config_stat.stat.exists
         - instance_ids_to_terminate | length > 0
+        - spot_request_ids_to_cancel | default([]) | length == 0
 
     - name: Remove instance config
       ansible.builtin.file:
