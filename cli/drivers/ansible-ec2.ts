@@ -306,7 +306,7 @@ export function getCreatePlaybook(
 
           case "$state" in
             failed|closed|cancelled)
-              printf '%s\\n' "$request_json" >&2
+              printf '%s\n' "$request_json" >&2
               exit 1
               ;;
           esac
@@ -354,13 +354,6 @@ export function getCreatePlaybook(
       retries: 30
       delay: 10
 
-    - name: Wait for SSH on launched instance
-      ansible.builtin.wait_for:
-        host: "{{ ec2_result.instances[0].public_ip_address }}"
-        port: 22
-        delay: 15
-        timeout: 320
-
     - name: Write instance config for Molecule
       ansible.builtin.copy:
         dest: "{{ molecule_instance_config }}"
@@ -375,6 +368,13 @@ export function getCreatePlaybook(
               - {{ spot_result.spot_request.spot_instance_request_id }}
             instance_ids:
               - {{ spot_instance_id.stdout }}
+
+    - name: Wait for SSH on launched instance
+      ansible.builtin.wait_for:
+        host: "{{ ec2_result.instances[0].public_ip_address }}"
+        port: 22
+        delay: 15
+        timeout: 320
 `;
 }
 
