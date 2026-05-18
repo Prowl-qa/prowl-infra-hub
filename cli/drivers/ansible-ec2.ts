@@ -306,7 +306,7 @@ export function getCreatePlaybook(
 
           case "$state" in
             failed|closed|cancelled)
-              printf '%s\n' "$request_json" >&2
+              printf '%s\\n' "$request_json" >&2
               exit 1
               ;;
           esac
