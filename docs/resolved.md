@@ -135,3 +135,7 @@
 ## ~~INFRA-046: Build CLI artifact before package publish~~
 **Resolved**: 2026-05-18 (commit 2621de5)
 **Description**: Updated the published CLI package to run its esbuild bundle step during `prepack`, ensuring `dist/cli.js` exists before `npm pack` or publish. Added package-local Node build dependencies and a file-local Node type reference for the EC2 driver so Node built-ins remain typed when the CLI source is checked outside the app package context.
+
+## ~~INFRA-047: Type-check CLI with Node compiler settings~~
+**Resolved**: 2026-05-18 (commit 3e29682)
+**Description**: Added a CLI-local TypeScript config using NodeNext module resolution, ES2022 libs, and Node ambient types so `node:` built-in imports plus `process` and `Buffer` resolve when checking the package outside the Next app config. Wired `cli/package.json` so `prepack` runs the CLI typecheck before building `dist/cli.js`.
