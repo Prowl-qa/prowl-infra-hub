@@ -20,6 +20,10 @@
     "testing",
     "prowl"
   ],
+  "scripts": {
+    "build": "esbuild index.ts --bundle --platform=node --target=node20 --outfile=dist/cli.js && chmod +x dist/cli.js",
+    "prepack": "npm run build"
+  },
   "bin": {
     "prowl-infra": "./dist/cli.js"
   },
@@ -32,5 +36,10 @@
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "esbuild": "^0.28.0",
+    "typescript": "^5.9.3"
   }
 }
