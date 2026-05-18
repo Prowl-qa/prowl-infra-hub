@@ -277,6 +277,7 @@ export function getCreatePlaybook(
           RunId: "${testRunId}"
           managed-by: molecule
           environment: ${options.envProfile}
+          InstanceType: ${instanceType}
           Name: ${instanceName}
       register: spot_result
 
@@ -329,18 +330,6 @@ export function getCreatePlaybook(
         --region ${safeRegion}
       register: spot_instance_id
       changed_when: false
-
-    - name: Tag launched spot instance
-      amazon.aws.ec2_tag:
-        resource: "{{ spot_instance_id.stdout }}"
-        region: ${safeRegion}
-        tags:
-          prowl-test: "true"
-          Project: ${EC2_TEST_PROJECT_TAG}
-          RunId: "${testRunId}"
-          managed-by: molecule
-          environment: ${options.envProfile}
-          Name: ${instanceName}
 
     - name: Read launched spot instance details
       amazon.aws.ec2_instance_info:
@@ -453,10 +442,12 @@ export function getTerminateTaggedEc2InstancesFallbackCommand(
 ): string {
   const safeRegion = validateAwsRegion(region);
   return `SPOT_REQUEST_IDS=$(aws ec2 describe-spot-instance-requests --filters "Name=tag:prowl-test,Values=true" "Name=tag:Project,Values=${EC2_TEST_PROJECT_TAG}" "Name=tag:environment,Values=${envProfile}" "Name=tag:RunId,Values=${testRunId}" "Name=state,Values=open,active" --query "SpotInstanceRequests[].SpotInstanceRequestId" --output text --region ${safeRegion})
+SPOT_INSTANCE_IDS=$(aws ec2 describe-spot-instance-requests --filters "Name=tag:prowl-test,Values=true" "Name=tag:Project,Values=${EC2_TEST_PROJECT_TAG}" "Name=tag:environment,Values=${envProfile}" "Name=tag:RunId,Values=${testRunId}" "Name=state,Values=active" --query "SpotInstanceRequests[?InstanceId!=null].InstanceId" --output text --region ${safeRegion})
 if [ -n "$SPOT_REQUEST_IDS" ] && [ "$SPOT_REQUEST_IDS" != "None" ]; then
   aws ec2 cancel-spot-instance-requests --spot-instance-request-ids $SPOT_REQUEST_IDS --region ${safeRegion}
 fi
-INSTANCE_IDS=$(aws ec2 describe-instances --filters "Name=tag:prowl-test,Values=true" "Name=tag:Project,Values=${EC2_TEST_PROJECT_TAG}" "Name=tag:environment,Values=${envProfile}" "Name=tag:RunId,Values=${testRunId}" "Name=instance-state-name,Values=running,pending" --query "Reservations[].Instances[].InstanceId" --output text --region ${safeRegion})
+TAGGED_INSTANCE_IDS=$(aws ec2 describe-instances --filters "Name=tag:prowl-test,Values=true" "Name=tag:Project,Values=${EC2_TEST_PROJECT_TAG}" "Name=tag:environment,Values=${envProfile}" "Name=tag:RunId,Values=${testRunId}" "Name=instance-state-name,Values=running,pending" --query "Reservations[].Instances[].InstanceId" --output text --region ${safeRegion})
+INSTANCE_IDS=$(printf '%s\\n%s\\n' "$TAGGED_INSTANCE_IDS" "$SPOT_INSTANCE_IDS" | tr '\\t ' '\\n' | grep -v '^None$' | sort -u | tr '\\n' ' ')
 if [ -n "$INSTANCE_IDS" ] && [ "$INSTANCE_IDS" != "None" ]; then
   aws ec2 terminate-instances --instance-ids $INSTANCE_IDS --region ${safeRegion}
 fi`;

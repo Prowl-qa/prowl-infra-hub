@@ -135,6 +135,9 @@ test('getTerminateTaggedEc2InstancesFallbackCommand keeps instance ids attached 
   assert.match(command, /Name=tag:environment,Values=ubuntu-2204/);
   assert.match(command, /Name=tag:Project,Values=ec2-test-env/);
   assert.match(command, /Name=tag:RunId,Values=run-123/);
+  assert.match(command, /SPOT_INSTANCE_IDS=\$\(aws ec2 describe-spot-instance-requests/);
+  assert.match(command, /TAGGED_INSTANCE_IDS=\$\(aws ec2 describe-instances/);
+  assert.match(command, /grep -v '\^None\$'/);
   assert.match(command, /aws ec2 cancel-spot-instance-requests --spot-instance-request-ids \$SPOT_REQUEST_IDS --region us-east-1/);
   assert.match(command, /aws ec2 terminate-instances --instance-ids \$INSTANCE_IDS --region us-east-1/);
   assert.doesNotMatch(command, /aws ec2 terminate-instances --instance-ids --region us-east-1/);
@@ -212,6 +215,8 @@ test('getCreatePlaybook launches a spot instance via ec2_spot_instance', () => {
   assert.match(playbook, /Project: ec2-test-env/);
   assert.match(playbook, /RunId: "run-123"/);
   assert.match(playbook, /prowl-test: "true"/);
+  assert.match(playbook, /InstanceType: m6i\.large/);
+  assert.doesNotMatch(playbook, /amazon\.aws\.ec2_tag:/);
   assert.match(playbook, /describe-spot-instance-requests/);
   assert.match(playbook, /spot_instance_request_ids:/);
   assert.match(playbook, /Wait for spot request fulfillment/);

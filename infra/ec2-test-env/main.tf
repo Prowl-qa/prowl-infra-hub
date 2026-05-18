@@ -96,12 +96,31 @@ data "aws_iam_policy_document" "molecule_ec2" {
   }
 
   statement {
-    sid     = "EC2TagProjectInstances"
+    sid       = "EC2TerminateAllowedSpotInstances"
+    effect    = "Allow"
+    actions   = ["ec2:TerminateInstances"]
+    resources = ["arn:aws:ec2:*:*:instance/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:InstanceMarketType"
+      values   = ["spot"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:InstanceType"
+      values   = var.allowed_instance_types
+    }
+  }
+
+  statement {
+    sid     = "EC2TagProjectResourcesOnCreate"
     effect  = "Allow"
     actions = ["ec2:CreateTags"]
-    # Covers both instances (launch-time tagging from RunInstances or
-    # post-launch ec2_tag) and spot-instance requests (tags set in the
-    # ec2_spot_instance launch_specification).
+    # Tag only during resource creation. This prevents the role from
+    # retagging arbitrary existing instances as Project=ec2-test-env and
+    # then terminating them through EC2TerminateProjectInstances.
     resources = [
       "arn:aws:ec2:*:*:instance/*",
       "arn:aws:ec2:*:*:spot-instances-request/*",
@@ -114,11 +133,15 @@ data "aws_iam_policy_document" "molecule_ec2" {
     }
 
     condition {
+      test     = "StringEquals"
+      variable = "ec2:CreateAction"
+      values   = ["RunInstances", "RequestSpotInstances"]
+    }
+
+    condition {
       test     = "ForAllValues:StringEquals"
       variable = "aws:TagKeys"
-      # "Name" is set by amazon.aws.ec2_instance's `name:` parameter, which
-      # we use to identify each Molecule test instance.
-      values = ["Project", "RunId", "environment", "managed-by", "prowl-test", "Name"]
+      values   = ["Project", "RunId", "environment", "managed-by", "prowl-test", "Name", "InstanceType"]
     }
   }
 
@@ -150,7 +173,8 @@ data "aws_iam_policy_document" "molecule_ec2" {
     }
   }
 
-  # Same instance-type restriction for the RequestSpotInstances code path.
+  # RequestSpotInstances does not expose ec2:InstanceType as a condition key;
+  # require the supported request tag mirror emitted by the generated playbook.
   statement {
     sid       = "RestrictSpotInstanceTypes"
     effect    = "Deny"
@@ -158,8 +182,8 @@ data "aws_iam_policy_document" "molecule_ec2" {
     resources = ["*"]
 
     condition {
-      test     = "ForAnyValue:StringNotEquals"
-      variable = "ec2:InstanceType"
+      test     = "StringNotEquals"
+      variable = "aws:RequestTag/InstanceType"
       values   = var.allowed_instance_types
     }
   }
