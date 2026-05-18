@@ -21,8 +21,9 @@
     "prowl"
   ],
   "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "esbuild index.ts --bundle --platform=node --target=node20 --outfile=dist/cli.js && chmod +x dist/cli.js",
-    "prepack": "npm run build"
+    "prepack": "npm run typecheck && npm run build"
   },
   "bin": {
     "prowl-infra": "./dist/cli.js"

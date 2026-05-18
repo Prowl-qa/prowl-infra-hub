@@ -1,5 +1,3 @@
-/// <reference types="node" />
-
 import { execSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
