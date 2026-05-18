@@ -107,3 +107,27 @@
 ## ~~INFRA-039: Pin EC2 test AWS dependencies~~
 **Resolved**: 2026-05-17 (commit faa20cc)
 **Description**: Updated `.github/workflows/test-playbook-ec2.yml` to pin the primary EC2 test stack: `molecule>=5,<6`, `molecule-plugins[ec2]==23.5.3`, `ansible-core>=2.15,<2.18`, `boto3==1.34.131`, `botocore==1.34.131`, `amazon.aws:==7.5.0`, and `community.aws:==7.2.0`. The Molecule pins restore bundled EC2 driver auto-wiring for `create.yml` / `destroy.yml`, which is the root fix for the missing `create.yml` failure, while the AWS SDK and collection pins avoid floating installs in CI.
+
+## ~~INFRA-040: Harden delegated EC2 driver configuration~~
+**Resolved**: 2026-05-17 (commit aaf602c)
+**Description**: Pinned the delegated-driver workflow to `molecule>=6,<7`, changed the generated `amazon.aws.ec2_instance` create task to use `network.assign_public_ip`, added `--spot-max-price` with instance-size-based defaults, and made EC2 instance names include a per-playbook slug/hash so `--all` runs do not reuse the same Name tag within a shared `PROWL_EC2_RUN_ID`.
+
+## ~~INFRA-041: Provision EC2 tests with supported Spot module~~
+**Resolved**: 2026-05-17 (commit 2e92f7b)
+**Description**: Updated the delegated EC2 create playbook to request test hosts with `amazon.aws.ec2_spot_instance` instead of passing Spot market options to `amazon.aws.ec2_instance`. The create flow now waits for Spot fulfillment, reads and tags the launched instance, records the Spot request ID in Molecule instance config, and destroys via `amazon.aws.ec2_spot_instance` with `terminate_instances: true`.
+
+## ~~INFRA-042: Cancel unfulfilled Spot requests during cleanup~~
+**Resolved**: 2026-05-17 (commit c28dfb3)
+**Description**: Updated delegated EC2 provisioning to write provisional Molecule cleanup metadata immediately after creating a Spot request, before waiting for fulfillment. Expanded both the driver fallback cleanup and GitHub Actions cleanup job to cancel open or active tagged Spot requests for the run before terminating leaked instances, preventing later fulfillment leaks when capacity wait fails.
+
+## ~~INFRA-043: Bound Spot wait and validate AWS region~~
+**Resolved**: 2026-05-17 (commit 285e1f5)
+**Description**: Updated delegated EC2 provisioning to validate AWS regions before interpolating them into AWS CLI commands, replaced the unbounded `aws ec2 wait spot-instance-request-fulfilled` waiter with an explicit 5-minute polling loop that fails fast on terminal Spot request states and prints describe output, and corrected the delegated workflow Molecule pin to `molecule>=6,<7`.
+
+## ~~INFRA-044: Wait through non-terminal Spot request status codes~~
+**Resolved**: 2026-05-17 (commit c9e52fb)
+**Description**: Updated the delegated EC2 Spot fulfillment loop so transient non-terminal status codes such as capacity or pricing constraints do not fail scheduled tests before the 5-minute deadline. The loop now fails early only for terminal Spot request states (`failed`, `closed`, or `cancelled`) while continuing to poll open requests.
+
+## ~~INFRA-045: Accept AWS partition region names~~
+**Resolved**: 2026-05-17 (commit 7c3922e)
+**Description**: Broadened EC2 driver region validation so valid AWS partition region names such as `us-iso-east-1`, `us-isob-east-1`, `eu-isoe-west-1`, `us-isof-south-1`, and `eusc-de-east-1` are accepted before AWS CLI calls, while unsafe characters and malformed region strings still fail validation.
