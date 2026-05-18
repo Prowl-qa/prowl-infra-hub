@@ -269,6 +269,16 @@ export function getCreatePlaybook(
           Name: ${instanceName}
       register: spot_result
 
+    - name: Write provisional spot request config for Molecule cleanup
+      ansible.builtin.copy:
+        dest: "{{ molecule_instance_config }}"
+        mode: "0644"
+        content: |
+          - instance: ${instanceName}
+            spot_instance_request_ids:
+              - {{ spot_result.spot_request.spot_instance_request_id }}
+            instance_ids: []
+
     - name: Wait for spot request fulfillment
       ansible.builtin.command: >
         aws ec2 wait spot-instance-request-fulfilled
@@ -406,7 +416,11 @@ export function getTerminateTaggedEc2InstancesFallbackCommand(
   region: string,
   testRunId: string
 ): string {
-  return `INSTANCE_IDS=$(aws ec2 describe-instances --filters "Name=tag:prowl-test,Values=true" "Name=tag:Project,Values=${EC2_TEST_PROJECT_TAG}" "Name=tag:environment,Values=${envProfile}" "Name=tag:RunId,Values=${testRunId}" "Name=instance-state-name,Values=running,pending" --query "Reservations[].Instances[].InstanceId" --output text --region ${region})
+  return `SPOT_REQUEST_IDS=$(aws ec2 describe-spot-instance-requests --filters "Name=tag:prowl-test,Values=true" "Name=tag:Project,Values=${EC2_TEST_PROJECT_TAG}" "Name=tag:environment,Values=${envProfile}" "Name=tag:RunId,Values=${testRunId}" "Name=state,Values=open,active" --query "SpotInstanceRequests[].SpotInstanceRequestId" --output text --region ${region})
+if [ -n "$SPOT_REQUEST_IDS" ] && [ "$SPOT_REQUEST_IDS" != "None" ]; then
+  aws ec2 cancel-spot-instance-requests --spot-instance-request-ids $SPOT_REQUEST_IDS --region ${region}
+fi
+INSTANCE_IDS=$(aws ec2 describe-instances --filters "Name=tag:prowl-test,Values=true" "Name=tag:Project,Values=${EC2_TEST_PROJECT_TAG}" "Name=tag:environment,Values=${envProfile}" "Name=tag:RunId,Values=${testRunId}" "Name=instance-state-name,Values=running,pending" --query "Reservations[].Instances[].InstanceId" --output text --region ${region})
 if [ -n "$INSTANCE_IDS" ] && [ "$INSTANCE_IDS" != "None" ]; then
   aws ec2 terminate-instances --instance-ids $INSTANCE_IDS --region ${region}
 fi`;
