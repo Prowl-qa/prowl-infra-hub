@@ -19,6 +19,9 @@
 # production
 /build
 
+# bundled CLI artifact (built on publish)
+/cli/dist/
+
 # misc
 .DS_Store
 *.pem
