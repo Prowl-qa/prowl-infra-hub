@@ -27,6 +27,7 @@ Options:
   --os <target>          Target OS for Docker driver (default: auto-detect from playbook)
   --env <profile|all>    EC2 environment profile (default: rhel9-current)
   --instance-type <type> Override instance type for EC2 (default: from profile)
+  --spot-max-price <usd> Override EC2 spot max price (default: based on instance size)
   --all                  Test all playbooks in the repo
   --platforms            Show supported Docker platforms
   --environments         Show supported EC2 environment profiles
@@ -200,7 +201,8 @@ async function testPlaybookEc2(
   ec2Config: Ec2Config,
   outputDir: string,
   updateYaml: boolean,
-  instanceType?: string
+  instanceType?: string,
+  maxPrice?: string
 ): Promise<boolean> {
   const content = await fs.readFile(playbookPath, 'utf8');
   const tool = detectTool(content);
@@ -220,6 +222,7 @@ async function testPlaybookEc2(
     playbookPath,
     envProfile,
     instanceType,
+    maxPrice,
     subnetId: ec2Config.subnetId,
     securityGroupId: ec2Config.securityGroupId,
     keyPairName: ec2Config.keyPairName,
@@ -301,6 +304,7 @@ async function main(): Promise<void> {
   let targetOs: string | undefined;
   let envProfile = 'rhel9-current';
   let instanceType: string | undefined;
+  let maxPrice: string | undefined;
   let outputDir = REPORT_DIR;
   let updateYaml = false;
   let testAll = false;
@@ -321,6 +325,8 @@ async function main(): Promise<void> {
       envProfile = args[++i];
     } else if (arg === '--instance-type' && args[i + 1]) {
       instanceType = args[++i];
+    } else if (arg === '--spot-max-price' && args[i + 1]) {
+      maxPrice = args[++i];
     } else if (arg === '--output' && args[i + 1]) {
       outputDir = args[++i];
     } else if (arg === '--update-yaml') {
@@ -388,7 +394,7 @@ async function main(): Promise<void> {
         // EC2: run against each environment profile
         for (const env of envProfiles) {
           const ok = await testPlaybookEc2(
-            playbookPath, env, ec2Config!, outputDir, updateYaml, instanceType
+            playbookPath, env, ec2Config!, outputDir, updateYaml, instanceType, maxPrice
           );
           if (ok) passed++;
           else failed++;
