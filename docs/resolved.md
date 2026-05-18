@@ -115,3 +115,7 @@
 ## ~~INFRA-041: Provision EC2 tests with supported Spot module~~
 **Resolved**: 2026-05-17 (commit 2e92f7b)
 **Description**: Updated the delegated EC2 create playbook to request test hosts with `amazon.aws.ec2_spot_instance` instead of passing Spot market options to `amazon.aws.ec2_instance`. The create flow now waits for Spot fulfillment, reads and tags the launched instance, records the Spot request ID in Molecule instance config, and destroys via `amazon.aws.ec2_spot_instance` with `terminate_instances: true`.
+
+## ~~INFRA-042: Cancel unfulfilled Spot requests during cleanup~~
+**Resolved**: 2026-05-17 (commit c28dfb3)
+**Description**: Updated delegated EC2 provisioning to write provisional Molecule cleanup metadata immediately after creating a Spot request, before waiting for fulfillment. Expanded both the driver fallback cleanup and GitHub Actions cleanup job to cancel open or active tagged Spot requests for the run before terminating leaked instances, preventing later fulfillment leaks when capacity wait fails.
