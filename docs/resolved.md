@@ -119,3 +119,7 @@
 ## ~~INFRA-042: Cancel unfulfilled Spot requests during cleanup~~
 **Resolved**: 2026-05-17 (commit c28dfb3)
 **Description**: Updated delegated EC2 provisioning to write provisional Molecule cleanup metadata immediately after creating a Spot request, before waiting for fulfillment. Expanded both the driver fallback cleanup and GitHub Actions cleanup job to cancel open or active tagged Spot requests for the run before terminating leaked instances, preventing later fulfillment leaks when capacity wait fails.
+
+## ~~INFRA-043: Bound Spot wait and validate AWS region~~
+**Resolved**: 2026-05-17 (commit 285e1f5)
+**Description**: Updated delegated EC2 provisioning to validate AWS regions before interpolating them into AWS CLI commands, replaced the unbounded `aws ec2 wait spot-instance-request-fulfilled` waiter with an explicit 5-minute polling loop that fails fast on terminal Spot request states and prints describe output, and corrected the delegated workflow Molecule pin to `molecule>=6,<7`.
