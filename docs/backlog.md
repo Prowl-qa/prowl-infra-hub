@@ -10,9 +10,6 @@
 
 ## High Priority
 
-{PQIH-006} **INFRA-025: EC2 testing documentation**
-   New `docs/ec2-testing.md` covering: AWS account creation walkthrough, Terraform setup steps, GitHub Secrets configuration checklist, CLI usage with `--driver ec2` and `--env`, environment profile reference (what each simulates and why — based on enterprise deployment research), cost expectations (~$0.60/full matrix run across 6 environments, ~$2.50/month at weekly, $0 during AWS free tier for t3.micro), troubleshooting (leaked instances, SSH timeouts, spot capacity), and how to add custom environment profiles.
-
 ## Low Priority / Post-Release
 
 {PQIH-008} **INFRA-008: Prowl Infra Test CLI — Terraform driver**
