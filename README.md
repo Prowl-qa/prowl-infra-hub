@@ -32,12 +32,12 @@ This repo also publishes a standalone CLI for testing playbooks. Install it
 globally to run `prowl-infra test ...` from anywhere:
 
 ```bash
-npm install -g @prowl-qa/infra-cli
+npm install -g @prowlqa/infra-cli
 prowl-infra test path/to/playbook.yml
 ```
 
 The CLI source lives in [`cli/`](cli) and is published as
-[`@prowl-qa/infra-cli`](https://www.npmjs.com/package/@prowl-qa/infra-cli).
+[`@prowlqa/infra-cli`](https://www.npmjs.com/package/@prowlqa/infra-cli).
 See [`cli/README.md`](cli/README.md) for usage details and
 [`docs/ec2-testing.md`](docs/ec2-testing.md) for the EC2 driver walkthrough.
 
