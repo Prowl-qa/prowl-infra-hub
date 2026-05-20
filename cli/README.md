@@ -1,4 +1,4 @@
-# @prowl-qa/infra-cli
+# @prowlqa/infra-cli
 
 `prowl-infra` is a command-line tool for testing Ansible playbooks published in
 the [Prowl Infra Hub](https://github.com/Prowl-qa/prowl-infra-hub) catalog. It
@@ -9,7 +9,7 @@ real Linux host).
 ## Install
 
 ```bash
-npm install -g @prowl-qa/infra-cli
+npm install -g @prowlqa/infra-cli
 ```
 
 Requires Node.js 20+.
