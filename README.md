@@ -39,8 +39,7 @@ prowl-infra test path/to/playbook.yml
 The CLI source lives in [`cli/`](cli) and is published as
 [`@prowl-qa/infra-cli`](https://www.npmjs.com/package/@prowl-qa/infra-cli).
 See [`cli/README.md`](cli/README.md) for usage details and
-[`docs/ec2-testing.md`](docs/ec2-testing.md) (when published) for the EC2 driver
-walkthrough.
+[`docs/ec2-testing.md`](docs/ec2-testing.md) for the EC2 driver walkthrough.
 
 To bundle the CLI locally for verification:
 
