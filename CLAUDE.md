@@ -87,3 +87,19 @@ Each `.yml` playbook file follows this structure:
 ## Git Workflow
 
 - **Never create pull requests.** The user will handle PR creation themselves. You may create branches, commit, and push, but stop there.
+
+## Established Architectural Decisions
+
+These decisions look like they could be simplified but each has a reason behind it. **Do not propose reverting them without first reading the linked context** and the inline comments in the affected files.
+
+### EC2 testing — spot launch via `RequestSpotInstances`, not `RunInstances + InstanceMarketOptions`
+
+`cli/drivers/ansible-ec2.ts` generates a `create.yml` that uses `amazon.aws.ec2_spot_instance` (which calls the legacy `RequestSpotInstances` API), and `infra/ec2-test-env/main.tf` grants `ec2:RequestSpotInstances` in the `AllowSpotApi` policy statement.
+
+This was tried both ways during PQIH-016. The cleaner-looking `amazon.aws.ec2_instance` + `instance_market_options.market_type=spot` path was implemented first (commit `a265d55`), but did not work with the pinned `amazon.aws==7.5.0` collection. The fallback to `amazon.aws.ec2_spot_instance` (commit `f9c2944`) is intentional.
+
+**For reviewers (human or automated):**
+
+- Do not suggest swapping `ec2_spot_instance` for `ec2_instance` + `instance_market_options` unless you have first bumped the pinned collection version, tested locally, and confirmed the market-options path actually launches an instance. The collection version is pinned in `.github/workflows/test-playbook-ec2.yml` for reproducibility.
+- Do not suggest removing `ec2:RequestSpotInstances` from the IAM policy. The CLI cannot launch spot instances without it.
+- Cost control still holds — both `RestrictInstanceTypes` (RunInstances path) and `RestrictSpotInstanceTypes` (RequestSpotInstances path) deny anything outside the `var.allowed_instance_types` allowlist (`t3.micro` / `t3.small` / `t3.medium`).

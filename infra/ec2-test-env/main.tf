@@ -138,13 +138,19 @@ data "aws_iam_policy_document" "molecule_ec2" {
     }
   }
 
-  # Spot request lifecycle. Launches go through RunInstances with Spot market
-  # options so the RunInstances deny conditions enforce type and spot-only
-  # constraints; cleanup only needs describe/cancel for tagged requests.
+  # Spot request lifecycle. The CLI's create.yml uses amazon.aws.ec2_spot_instance
+  # (commit f9c2944), which calls the RequestSpotInstances API — not the
+  # RunInstances + InstanceMarketOptions path. Both APIs are valid; the
+  # ec2_spot_instance module was chosen because the pinned amazon.aws 7.5.0
+  # collection's ec2_instance module did not handle instance_market_options
+  # correctly. **Do not remove RequestSpotInstances** without first migrating
+  # the create.yml back to ec2_instance + market_options and confirming it
+  # works against the same pinned collection version.
   statement {
     sid    = "AllowSpotApi"
     effect = "Allow"
     actions = [
+      "ec2:RequestSpotInstances",
       "ec2:DescribeSpotInstanceRequests",
     ]
     resources = ["*"]
@@ -177,12 +183,25 @@ data "aws_iam_policy_document" "molecule_ec2" {
     }
   }
 
-  # Do not grant RequestSpotInstances or add a RestrictSpotInstanceTypes deny
-  # using aws:RequestTag/InstanceType. Spot launches use RunInstances with
-  # InstanceMarketOptions, and the EC2 driver also validates instance types
-  # against the same set as var.allowed_instance_types before launch.
+  # Mirror the instance-type restriction on the RequestSpotInstances path so
+  # spot requests launched via ec2_spot_instance hit the same allowlist
+  # (t3.micro / t3.small / t3.medium). The condition variable ec2:InstanceType
+  # is honored by RequestSpotInstances against launch_specification.InstanceType.
+  statement {
+    sid       = "RestrictSpotInstanceTypes"
+    effect    = "Deny"
+    actions   = ["ec2:RequestSpotInstances"]
+    resources = ["*"]
+
+    condition {
+      test     = "ForAnyValue:StringNotEquals"
+      variable = "ec2:InstanceType"
+      values   = var.allowed_instance_types
+    }
+  }
 
   # Restrict to spot instances only (cost control) on the RunInstances path.
+  # RequestSpotInstances is inherently spot, so no mirror needed.
   statement {
     sid       = "RequireSpotInstances"
     effect    = "Deny"
