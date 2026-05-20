@@ -1,5 +1,5 @@
 {
-  "name": "@prowl-qa/infra-cli",
+  "name": "@prowlqa/infra-cli",
   "version": "0.0.1",
   "description": "Prowl Infra test CLI — validate Ansible playbooks locally or against ephemeral EC2 instances.",
   "license": "Apache-2.0",
