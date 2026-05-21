@@ -100,7 +100,7 @@ jobs:
         run: |
           python3 -m pip install --quiet pyyaml
           ERRORS=""
-          for file in $(find . -name '*.yml' -not -path './.github/*'); do
+          while IFS= read -r -d '' file; do
             python3 -c "
           import yaml, sys
           file = sys.argv[1]
@@ -112,7 +112,7 @@ jobs:
               print(str(e))
               sys.exit(1)
           " "$file" 2>&1 || ERRORS="${ERRORS}\n  ${file}"
-          done
+          done < <(find . -name '*.yml' -not -path './.github/*' -print0)
           if [ -n "$ERRORS" ]; then
             echo "::error::YAML parsing failed for:"
             echo -e "$ERRORS"
