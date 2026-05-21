@@ -32,22 +32,19 @@ jobs:
       - name: Detect changed and deleted YAML files
         id: changes
         run: |
-          DIRS="patching provisioning security monitoring containers networking backup configuration ci-cd"
-          PATTERN=""
-          for dir in $DIRS; do
-            PATTERN="${PATTERN} ${dir}/"
-          done
+          PATHS=(patching/ provisioning/ security/ monitoring/ containers/ networking/ backup/ configuration/ ci-cd/)
 
-          CHANGED=$(git diff --name-only --diff-filter=ACMR HEAD~1 HEAD -- $PATTERN | grep '\.yml$' || true)
-          DELETED=$(git diff --name-only --diff-filter=D HEAD~1 HEAD -- $PATTERN | grep '\.yml$' || true)
+          CHANGED=$(git diff --name-only --diff-filter=ACMR HEAD~1 HEAD -- "${PATHS[@]}" | grep '\.yml$' || true)
+          DELETED=$(git diff --name-only --diff-filter=D HEAD~1 HEAD -- "${PATHS[@]}" | grep '\.yml$' || true)
 
-          echo "changed<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGED" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-          echo "deleted<<EOF" >> $GITHUB_OUTPUT
-          echo "$DELETED" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "changed<<EOF"
+            echo "$CHANGED"
+            echo "EOF"
+            echo "deleted<<EOF"
+            echo "$DELETED"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Import changed files
         if: steps.changes.outputs.changed != ''
