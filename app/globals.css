@@ -665,13 +665,127 @@ main {
 
 .site-footer {
   border-top: 1px solid var(--border);
-  padding: 1.25rem 0 1.8rem;
+  padding: 2.6rem 0 1.6rem;
   background: color-mix(in srgb, var(--surface) 84%, transparent);
 }
 
-.site-footer p {
-  margin: 0.2rem 0;
+.footer-shell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 2.5rem;
+}
+
+.footer-brand {
+  max-width: 320px;
+}
+
+.footer-brand-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.footer-brand-head img {
+  border-radius: 999px;
+  box-shadow: 0 8px 18px -12px rgba(7, 57, 79, 0.65);
+}
+
+.footer-brand-name {
+  font-family: var(--font-display), 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
+}
+
+.footer-brand p {
+  margin: 0.3rem 0 0;
   color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.footer-social {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 1.1rem;
+}
+
+.footer-social a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--surface-tint) 70%, transparent);
+  transition: color 200ms ease, background-color 200ms ease, border-color 200ms ease;
+}
+
+.footer-social a:hover {
+  color: var(--brand-c);
+  border-color: var(--brand-a);
+  background: var(--surface);
+}
+
+.footer-social svg {
+  width: 18px;
+  height: 18px;
+}
+
+.footer-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2.5rem;
+}
+
+.footer-col h4 {
+  margin: 0 0 0.75rem;
+  font-family: var(--font-display), 'Space Grotesk', sans-serif;
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
+.footer-col ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.footer-col a {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.94rem;
+  transition: color 200ms ease;
+}
+
+.footer-col a:hover {
+  color: var(--brand-c);
+}
+
+.footer-legal {
+  margin-top: 2.4rem;
+}
+
+.footer-legal p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+@media (max-width: 700px) {
+  .footer-nav {
+    gap: 1.8rem;
+  }
 }
 
 .modal-backdrop {
