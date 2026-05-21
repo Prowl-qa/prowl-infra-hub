@@ -77,7 +77,7 @@ export default function SiteFooter() {
                 </a>
               </li>
               <li>
-                <a href="https://docs.prowlqa.dev" target="_blank" rel="noopener noreferrer">
+                <a href="https://docs.prowlqa.dev/getting-started" target="_blank" rel="noopener noreferrer">
                   Getting started
                 </a>
               </li>
