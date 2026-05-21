@@ -9,6 +9,55 @@ import type { PlaybookSummary } from '@/lib/playbooks';
 
 const ITEMS_PER_PAGE = 12;
 
+const SORT_OPTIONS = ['alphabetical', 'newest', 'most-tasks', 'risk-level'] as const;
+type SortOption = (typeof SORT_OPTIONS)[number];
+const DEFAULT_SORT: SortOption = 'alphabetical';
+
+function isSortOption(value: string): value is SortOption {
+  return (SORT_OPTIONS as readonly string[]).includes(value);
+}
+
+const RISK_RANK: Record<PlaybookSummary['riskLevel'], number> = {
+  high: 3,
+  medium: 2,
+  low: 1,
+};
+
+function compareByTitle(a: PlaybookSummary, b: PlaybookSummary): number {
+  return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+}
+
+function compareByUpdatedAt(a: PlaybookSummary, b: PlaybookSummary): number {
+  // Newest first — descending by ISO date string. ISO strings sort lexicographically
+  // in the same order as chronologically, so direct string comparison is safe.
+  if (a.updatedAt === b.updatedAt) return 0;
+  return a.updatedAt > b.updatedAt ? -1 : 1;
+}
+
+function compareByTaskCount(a: PlaybookSummary, b: PlaybookSummary): number {
+  return b.taskCount - a.taskCount;
+}
+
+function compareByRisk(a: PlaybookSummary, b: PlaybookSummary): number {
+  // High → low: a riskier playbook ranks first so reviewers see them up front.
+  return RISK_RANK[b.riskLevel] - RISK_RANK[a.riskLevel];
+}
+
+function sortPlaybooks(playbooks: PlaybookSummary[], sort: SortOption): PlaybookSummary[] {
+  const copy = [...playbooks];
+  switch (sort) {
+    case 'newest':
+      return copy.sort((a, b) => compareByUpdatedAt(a, b) || compareByTitle(a, b));
+    case 'most-tasks':
+      return copy.sort((a, b) => compareByTaskCount(a, b) || compareByTitle(a, b));
+    case 'risk-level':
+      return copy.sort((a, b) => compareByRisk(a, b) || compareByTitle(a, b));
+    case 'alphabetical':
+    default:
+      return copy.sort(compareByTitle);
+  }
+}
+
 interface BrowseShellProps {
   playbooks: PlaybookSummary[];
 }
@@ -47,6 +96,8 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
   const toolFilter = searchParams.get('tool') || 'all';
   const riskFilter = searchParams.get('risk') || 'all';
   const cloudFilter = searchParams.get('cloud') || 'all';
+  const sortParam = searchParams.get('sort') || DEFAULT_SORT;
+  const sortOption: SortOption = isSortOption(sortParam) ? sortParam : DEFAULT_SORT;
   const currentPage = Math.max(1, Number(searchParams.get('page')) || 1);
 
   const [query, setQuery] = useState('');
@@ -82,7 +133,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
   const filteredPlaybooks = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
-    return playbooks.filter((playbook) => {
+    const filtered = playbooks.filter((playbook) => {
       const categoryMatch = category === 'all' || playbook.category === category;
       const toolMatch = toolFilter === 'all' || playbook.tool === toolFilter;
       const riskMatch = riskFilter === 'all' || playbook.riskLevel === riskFilter;
@@ -94,7 +145,9 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
 
       return categoryMatch && toolMatch && riskMatch && cloudMatch && queryMatch;
     });
-  }, [playbooks, query, category, toolFilter, riskFilter, cloudFilter]);
+
+    return sortPlaybooks(filtered, sortOption);
+  }, [playbooks, query, category, toolFilter, riskFilter, cloudFilter, sortOption]);
 
   const totalPages = Math.max(1, Math.ceil(filteredPlaybooks.length / ITEMS_PER_PAGE));
   const safePage = Math.min(currentPage, totalPages);
@@ -106,7 +159,11 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
     (page: number, params: Record<string, string>) => {
       const urlParams = new URLSearchParams();
       for (const [key, value] of Object.entries(params)) {
-        if (value !== 'all') urlParams.set(key, value);
+        // Keep the URL clean: omit defaults ("all" for the filter chips, the
+        // alphabetical default for sort).
+        if (key === 'sort' && value === DEFAULT_SORT) continue;
+        if (key !== 'sort' && value === 'all') continue;
+        urlParams.set(key, value);
       }
       if (page > 1) urlParams.set('page', String(page));
       const qs = urlParams.toString();
@@ -123,7 +180,13 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
   }, []);
 
   function handleFilterChange(key: string, value: string) {
-    const params: Record<string, string> = { category, tool: toolFilter, risk: riskFilter, cloud: cloudFilter };
+    const params: Record<string, string> = {
+      category,
+      tool: toolFilter,
+      risk: riskFilter,
+      cloud: cloudFilter,
+      sort: sortOption,
+    };
     params[key] = value;
     startTransition(() => {
       updateUrl(1, params);
@@ -132,7 +195,13 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
 
   function handlePageChange(page: number) {
     startTransition(() => {
-      updateUrl(page, { category, tool: toolFilter, risk: riskFilter, cloud: cloudFilter });
+      updateUrl(page, {
+        category,
+        tool: toolFilter,
+        risk: riskFilter,
+        cloud: cloudFilter,
+        sort: sortOption,
+      });
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -312,6 +381,20 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
               {cloudProviders.map((c) => (
                 <option key={c} value={c}>{c === 'all' ? 'All providers' : c}</option>
               ))}
+            </select>
+          </div>
+
+          <div className="filter-group">
+            <label htmlFor="filter-sort">Sort by</label>
+            <select
+              id="filter-sort"
+              value={sortOption}
+              onChange={(e) => handleFilterChange('sort', e.target.value)}
+            >
+              <option value="alphabetical">Alphabetical (A–Z)</option>
+              <option value="newest">Newest first</option>
+              <option value="most-tasks">Most tasks</option>
+              <option value="risk-level">Risk level (high → low)</option>
             </select>
           </div>
         </div>
