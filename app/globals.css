@@ -291,7 +291,9 @@ main {
 .metrics {
   margin-top: 30px;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Two columns while Total downloads is hidden (PQIH-022). Restore
+     repeat(3, ...) when the metric is re-enabled. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
 
