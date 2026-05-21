@@ -130,6 +130,33 @@ Every PR is automatically validated:
 7. **Dangerous command scan** — flags `rm -rf`, `dd`, `mkfs`, `iptables -F`, etc.
 8. **URL/IP scan** — flags hardcoded IPs and non-allowlisted URLs
 
+### Workflow file linting
+
+PRs that touch `.github/workflows/**` are additionally validated by
+[`actionlint`](https://github.com/rhysd/actionlint) (via
+`.github/workflows/lint-workflows.yml`). `actionlint` checks GitHub
+Actions expression syntax, missing `permissions:` blocks, deprecated
+action versions, and a number of other common workflow bugs. When
+`shellcheck` is available alongside `actionlint`, it also lints the
+bash inside every `run:` block — catching unquoted variables, missing
+exit-code checks, and similar shell issues that have bitten us
+historically (see PQIH-001 and PQIH-016).
+
+To run the same checks locally before opening a PR:
+
+```bash
+brew install actionlint shellcheck   # macOS
+# or
+sudo apt-get install -y actionlint shellcheck   # Linux
+
+# From the repo root:
+actionlint                            # lints all workflows
+actionlint .github/workflows/foo.yml  # lints a specific workflow
+```
+
+`actionlint` invokes `shellcheck` automatically when it's on `PATH`;
+no extra flags needed.
+
 ## Tag Conventions
 
 Use lowercase, hyphenated tags. Include:
