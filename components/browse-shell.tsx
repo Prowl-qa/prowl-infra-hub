@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from 'react';
+import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import PlaybookCard from '@/components/playbook-card';
@@ -100,16 +100,16 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
   const sortOption: SortOption = isSortOption(sortParam) ? sortParam : DEFAULT_SORT;
   const currentPage = Math.max(1, Number(searchParams.get('page')) || 1);
 
-  const [query, setQuery] = useState('');
-  const [selectedPlaybook, setSelectedPlaybook] = useState<PlaybookSummary | null>(null);
-  const [previewContent, setPreviewContent] = useState<string | null>(null);
-  const [copyState, setCopyState] = useState<'idle' | 'done' | 'failed'>('idle');
-  const modalPanelRef = useRef<HTMLDivElement | null>(null);
-  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
-  const triggerRef = useRef<HTMLElement | null>(null);
-  const previewRequestIdRef = useRef(0);
+  const [query, setQuery] = React.useState('');
+  const [selectedPlaybook, setSelectedPlaybook] = React.useState<PlaybookSummary | null>(null);
+  const [previewContent, setPreviewContent] = React.useState<string | null>(null);
+  const [copyState, setCopyState] = React.useState<'idle' | 'done' | 'failed'>('idle');
+  const modalPanelRef = React.useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const triggerRef = React.useRef<HTMLElement | null>(null);
+  const previewRequestIdRef = React.useRef(0);
 
-  const categories = useMemo(
+  const categories = React.useMemo(
     () => [
       { key: 'all', label: 'All' },
       ...Array.from(new Set(playbooks.map((p) => p.category))).map((key) => ({
@@ -120,17 +120,17 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
     [playbooks]
   );
 
-  const tools = useMemo(() => {
+  const tools = React.useMemo(() => {
     const set = new Set(playbooks.map((p) => p.tool));
     return ['all', ...Array.from(set).sort()];
   }, [playbooks]);
 
-  const cloudProviders = useMemo(() => {
+  const cloudProviders = React.useMemo(() => {
     const set = new Set(playbooks.map((p) => p.cloudProvider));
     return ['all', ...Array.from(set).sort()];
   }, [playbooks]);
 
-  const filteredPlaybooks = useMemo(() => {
+  const filteredPlaybooks = React.useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
     const filtered = playbooks.filter((playbook) => {
@@ -155,7 +155,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
   const paginatedPlaybooks = filteredPlaybooks.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   const pageNumbers = buildPageNumbers(safePage, totalPages);
 
-  const updateUrl = useCallback(
+  const updateUrl = React.useCallback(
     (page: number, params: Record<string, string>) => {
       const urlParams = new URLSearchParams();
       for (const [key, value] of Object.entries(params)) {
@@ -172,7 +172,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
     [router]
   );
 
-  const closePreview = useCallback(() => {
+  const closePreview = React.useCallback(() => {
     previewRequestIdRef.current += 1;
     setSelectedPlaybook(null);
     setPreviewContent(null);
@@ -188,13 +188,13 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
       sort: sortOption,
     };
     params[key] = value;
-    startTransition(() => {
+    React.startTransition(() => {
       updateUrl(1, params);
     });
   }
 
   function handlePageChange(page: number) {
-    startTransition(() => {
+    React.startTransition(() => {
       updateUrl(page, {
         category,
         tool: toolFilter,
@@ -250,7 +250,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
     }, 1400);
   }
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (!selectedPlaybook) {
       if (triggerRef.current) {
         triggerRef.current.focus();
@@ -325,7 +325,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
             type="search"
             placeholder="Try patching, nginx, docker..."
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event: React.ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)}
           />
         </label>
 
@@ -349,7 +349,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
             <select
               id="filter-tool"
               value={toolFilter}
-              onChange={(e) => handleFilterChange('tool', e.target.value)}
+              onChange={(event: React.ChangeEvent<HTMLSelectElement>) => handleFilterChange('tool', event.target.value)}
             >
               {tools.map((t) => (
                 <option key={t} value={t}>{t === 'all' ? 'All tools' : t}</option>
@@ -362,7 +362,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
             <select
               id="filter-risk"
               value={riskFilter}
-              onChange={(e) => handleFilterChange('risk', e.target.value)}
+              onChange={(event: React.ChangeEvent<HTMLSelectElement>) => handleFilterChange('risk', event.target.value)}
             >
               <option value="all">All levels</option>
               <option value="low">Low</option>
@@ -376,7 +376,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
             <select
               id="filter-cloud"
               value={cloudFilter}
-              onChange={(e) => handleFilterChange('cloud', e.target.value)}
+              onChange={(event: React.ChangeEvent<HTMLSelectElement>) => handleFilterChange('cloud', event.target.value)}
             >
               {cloudProviders.map((c) => (
                 <option key={c} value={c}>{c === 'all' ? 'All providers' : c}</option>
@@ -389,7 +389,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
             <select
               id="filter-sort"
               value={sortOption}
-              onChange={(e) => handleFilterChange('sort', e.target.value)}
+              onChange={(event: React.ChangeEvent<HTMLSelectElement>) => handleFilterChange('sort', event.target.value)}
             >
               <option value="alphabetical">Alphabetical (A–Z)</option>
               <option value="newest">Newest first</option>
@@ -472,7 +472,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
             aria-modal="true"
             aria-labelledby="preview-title"
             tabIndex={-1}
-            onClick={(event) => event.stopPropagation()}
+            onClick={(event: React.MouseEvent<HTMLDivElement>) => event.stopPropagation()}
           >
             <div className="modal-head">
               <h3 id="preview-title">{selectedPlaybook.title}</h3>
