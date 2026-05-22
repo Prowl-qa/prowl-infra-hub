@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 
 import { readPublishedPlaybook } from '@/lib/playbooks';
 import { trackDownload } from '@/lib/tracking';
@@ -47,14 +47,20 @@ export async function GET(request: Request) {
     const category = segments[0] || '';
     const playbookName = (segments[segments.length - 1] || '').replace(/\.yml$/, '');
 
-    trackDownload({
-      playbookPath: filePath,
-      category,
-      playbookName,
-      userAgent: request.headers.get('user-agent') ?? undefined,
-      referer: request.headers.get('referer') ?? undefined,
-      country: request.headers.get('cf-ipcountry') ?? undefined,
-    });
+    // Schedule the tracking POST to run after the response has been sent.
+    // `after()` keeps the Vercel function context alive until the POST
+    // settles, fixing the race where fire-and-forget fetches were silently
+    // dropped when the serverless invocation was torn down mid-flight.
+    after(() =>
+      trackDownload({
+        playbookPath: filePath,
+        category,
+        playbookName,
+        userAgent: request.headers.get('user-agent') ?? undefined,
+        referer: request.headers.get('referer') ?? undefined,
+        country: request.headers.get('cf-ipcountry') ?? undefined,
+      }),
+    );
   }
 
   return new NextResponse(content, {
