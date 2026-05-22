@@ -12,6 +12,7 @@ const ITEMS_PER_PAGE = 12;
 const SORT_OPTIONS = ['alphabetical', 'newest', 'most-tasks', 'risk-level'] as const;
 type SortOption = (typeof SORT_OPTIONS)[number];
 const DEFAULT_SORT: SortOption = 'alphabetical';
+const PREVIEW_ERROR_MESSAGE = 'Failed to load playbook content.';
 
 function isSortOption(value: string): value is SortOption {
   return (SORT_OPTIONS as readonly string[]).includes(value);
@@ -106,11 +107,12 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
   const sortValue: string = sortParam ?? DEFAULT_SORT;
   const sortOption: SortOption = isSortOption(sortValue) ? sortValue : DEFAULT_SORT;
   const pageValue = pageParam ? Number(pageParam) : 1;
-  const currentPage = Number.isFinite(pageValue) ? Math.max(1, pageValue) : 1;
+  const currentPage = Number.isFinite(pageValue) && Number.isInteger(pageValue) && pageValue >= 1 ? pageValue : 1;
 
   const [query, setQuery] = React.useState('');
   const [selectedPlaybook, setSelectedPlaybook] = React.useState<PlaybookSummary | null>(null);
   const [previewContent, setPreviewContent] = React.useState<string | null>(null);
+  const [previewError, setPreviewError] = React.useState<string | null>(null);
   const [copyState, setCopyState] = React.useState<'idle' | 'done' | 'failed'>('idle');
   const modalPanelRef = React.useRef<HTMLDivElement | null>(null);
   const closeButtonRef = React.useRef<HTMLButtonElement | null>(null);
@@ -184,6 +186,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
     previewRequestIdRef.current += 1;
     setSelectedPlaybook(null);
     setPreviewContent(null);
+    setPreviewError(null);
     setCopyState('idle');
   }, []);
 
@@ -223,6 +226,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
     const requestId = ++previewRequestIdRef.current;
     setSelectedPlaybook(playbook);
     setPreviewContent(null);
+    setPreviewError(null);
     setCopyState('idle');
 
     try {
@@ -233,18 +237,29 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
       if (response.ok) {
         setPreviewContent(await response.text());
       } else {
-        setPreviewContent('# Failed to load playbook content');
+        setPreviewContent(null);
+        setPreviewError(PREVIEW_ERROR_MESSAGE);
+        setCopyState('idle');
       }
     } catch {
       if (requestId !== previewRequestIdRef.current) {
         return;
       }
-      setPreviewContent('# Failed to load playbook content');
+      setPreviewContent(null);
+      setPreviewError(PREVIEW_ERROR_MESSAGE);
+      setCopyState('idle');
     }
   }
 
+  function handlePreviewError(_error: unknown, playbook: PlaybookSummary): void {
+    setSelectedPlaybook(playbook);
+    setPreviewContent(null);
+    setPreviewError(PREVIEW_ERROR_MESSAGE);
+    setCopyState('idle');
+  }
+
   async function handleCopy(): Promise<void> {
-    if (!previewContent) return;
+    if (!previewContent || previewError !== null) return;
 
     try {
       await navigator.clipboard.writeText(previewContent);
@@ -421,6 +436,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
               key={playbook.id}
               playbook={playbook}
               onPreview={handlePreview}
+              onPreviewError={handlePreviewError}
             />
           ))
         )}
@@ -506,16 +522,22 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
               </p>
             )}
 
-            <pre>
-              <code>{previewContent ?? 'Loading...'}</code>
-            </pre>
+            {previewError ? (
+              <p className="dialog-meta" role="alert">
+                {previewError}
+              </p>
+            ) : (
+              <pre>
+                <code>{previewContent ?? 'Loading...'}</code>
+              </pre>
+            )}
 
             <div className="dialog-actions">
               <button
                 type="button"
                 className="button button-ghost"
                 onClick={handleCopy}
-                disabled={!previewContent}
+                disabled={!previewContent || previewError !== null}
               >
                 {copyState === 'done' && 'Copied'}
                 {copyState === 'failed' && 'Copy failed'}
