@@ -13,9 +13,20 @@ const SORT_OPTIONS = ['alphabetical', 'newest', 'most-tasks', 'risk-level'] as c
 type SortOption = (typeof SORT_OPTIONS)[number];
 const DEFAULT_SORT: SortOption = 'alphabetical';
 const PREVIEW_ERROR_MESSAGE = 'Failed to load playbook content.';
+const RISK_FILTER_OPTIONS = [
+  { key: 'all', label: 'All levels' },
+  { key: 'low', label: 'Low' },
+  { key: 'medium', label: 'Medium' },
+  { key: 'high', label: 'High' },
+] as const;
+const RISK_FILTER_VALUES = RISK_FILTER_OPTIONS.map((option) => option.key);
 
 function isSortOption(value: string): value is SortOption {
   return (SORT_OPTIONS as readonly string[]).includes(value);
+}
+
+function normalizeFilterParam(value: string | null, allowedValues: readonly string[]): string {
+  return value && allowedValues.includes(value) ? value : 'all';
 }
 
 const RISK_RANK: Record<PlaybookSummary['riskLevel'], number> = {
@@ -100,25 +111,6 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
   const sortParam: string | null = searchParams.get('sort');
   const pageParam: string | null = searchParams.get('page');
 
-  const category: string = categoryParam ?? 'all';
-  const toolFilter: string = toolParam ?? 'all';
-  const riskFilter: string = riskParam ?? 'all';
-  const cloudFilter: string = cloudParam ?? 'all';
-  const sortValue: string = sortParam ?? DEFAULT_SORT;
-  const sortOption: SortOption = isSortOption(sortValue) ? sortValue : DEFAULT_SORT;
-  const pageValue = pageParam ? Number(pageParam) : 1;
-  const currentPage = Number.isFinite(pageValue) && Number.isInteger(pageValue) && pageValue >= 1 ? pageValue : 1;
-
-  const [query, setQuery] = React.useState('');
-  const [selectedPlaybook, setSelectedPlaybook] = React.useState<PlaybookSummary | null>(null);
-  const [previewContent, setPreviewContent] = React.useState<string | null>(null);
-  const [previewError, setPreviewError] = React.useState<string | null>(null);
-  const [copyState, setCopyState] = React.useState<'idle' | 'done' | 'failed'>('idle');
-  const modalPanelRef = React.useRef<HTMLDivElement | null>(null);
-  const closeButtonRef = React.useRef<HTMLButtonElement | null>(null);
-  const triggerRef = React.useRef<HTMLElement | null>(null);
-  const previewRequestIdRef = React.useRef(0);
-
   const categories = React.useMemo(
     () => [
       { key: 'all', label: 'All' },
@@ -139,6 +131,28 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
     const set = new Set(playbooks.map((p) => p.cloudProvider));
     return ['all', ...Array.from(set).sort()];
   }, [playbooks]);
+
+  const category: string = normalizeFilterParam(
+    categoryParam,
+    categories.map((entry) => entry.key)
+  );
+  const toolFilter: string = normalizeFilterParam(toolParam, tools);
+  const riskFilter: string = normalizeFilterParam(riskParam, RISK_FILTER_VALUES);
+  const cloudFilter: string = normalizeFilterParam(cloudParam, cloudProviders);
+  const sortValue: string = sortParam ?? DEFAULT_SORT;
+  const sortOption: SortOption = isSortOption(sortValue) ? sortValue : DEFAULT_SORT;
+  const pageValue = pageParam ? Number(pageParam) : 1;
+  const currentPage = Number.isFinite(pageValue) && Number.isInteger(pageValue) && pageValue >= 1 ? pageValue : 1;
+
+  const [query, setQuery] = React.useState('');
+  const [selectedPlaybook, setSelectedPlaybook] = React.useState<PlaybookSummary | null>(null);
+  const [previewContent, setPreviewContent] = React.useState<string | null>(null);
+  const [previewError, setPreviewError] = React.useState<string | null>(null);
+  const [copyState, setCopyState] = React.useState<'idle' | 'done' | 'failed'>('idle');
+  const modalPanelRef = React.useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const triggerRef = React.useRef<HTMLElement | null>(null);
+  const previewRequestIdRef = React.useRef(0);
 
   const filteredPlaybooks = React.useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -387,10 +401,9 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
               value={riskFilter}
               onChange={(event: React.ChangeEvent<HTMLSelectElement>) => handleFilterChange('risk', event.target.value)}
             >
-              <option value="all">All levels</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
+              {RISK_FILTER_OPTIONS.map((option) => (
+                <option key={option.key} value={option.key}>{option.label}</option>
+              ))}
             </select>
           </div>
 
