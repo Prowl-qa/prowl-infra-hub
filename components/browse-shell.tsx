@@ -92,13 +92,21 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const category = searchParams.get('category') || 'all';
-  const toolFilter = searchParams.get('tool') || 'all';
-  const riskFilter = searchParams.get('risk') || 'all';
-  const cloudFilter = searchParams.get('cloud') || 'all';
-  const sortParam = searchParams.get('sort') || DEFAULT_SORT;
-  const sortOption: SortOption = isSortOption(sortParam) ? sortParam : DEFAULT_SORT;
-  const currentPage = Math.max(1, Number(searchParams.get('page')) || 1);
+  const categoryParam: string | null = searchParams.get('category');
+  const toolParam: string | null = searchParams.get('tool');
+  const riskParam: string | null = searchParams.get('risk');
+  const cloudParam: string | null = searchParams.get('cloud');
+  const sortParam: string | null = searchParams.get('sort');
+  const pageParam: string | null = searchParams.get('page');
+
+  const category: string = categoryParam ?? 'all';
+  const toolFilter: string = toolParam ?? 'all';
+  const riskFilter: string = riskParam ?? 'all';
+  const cloudFilter: string = cloudParam ?? 'all';
+  const sortValue: string = sortParam ?? DEFAULT_SORT;
+  const sortOption: SortOption = isSortOption(sortValue) ? sortValue : DEFAULT_SORT;
+  const pageValue = pageParam ? Number(pageParam) : 1;
+  const currentPage = Number.isFinite(pageValue) ? Math.max(1, pageValue) : 1;
 
   const [query, setQuery] = React.useState('');
   const [selectedPlaybook, setSelectedPlaybook] = React.useState<PlaybookSummary | null>(null);
@@ -156,7 +164,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
   const pageNumbers = buildPageNumbers(safePage, totalPages);
 
   const updateUrl = React.useCallback(
-    (page: number, params: Record<string, string>) => {
+    (page: number, params: Record<string, string>): void => {
       const urlParams = new URLSearchParams();
       for (const [key, value] of Object.entries(params)) {
         // Keep the URL clean: omit defaults ("all" for the filter chips, the
@@ -179,7 +187,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
     setCopyState('idle');
   }, []);
 
-  function handleFilterChange(key: string, value: string) {
+  function handleFilterChange(key: string, value: string): void {
     const params: Record<string, string> = {
       category,
       tool: toolFilter,
@@ -193,7 +201,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
     });
   }
 
-  function handlePageChange(page: number) {
+  function handlePageChange(page: number): void {
     React.startTransition(() => {
       updateUrl(page, {
         category,
@@ -206,7 +214,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  async function handlePreview(playbook: PlaybookSummary) {
+  async function handlePreview(playbook: PlaybookSummary): Promise<void> {
     const activeElement = document.activeElement;
     if (activeElement instanceof HTMLElement) {
       triggerRef.current = activeElement;
@@ -235,7 +243,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
     }
   }
 
-  async function handleCopy() {
+  async function handleCopy(): Promise<void> {
     if (!previewContent) return;
 
     try {
@@ -412,7 +420,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
             <PlaybookCard
               key={playbook.id}
               playbook={playbook}
-              onPreview={() => handlePreview(playbook)}
+              onPreview={handlePreview}
             />
           ))
         )}
