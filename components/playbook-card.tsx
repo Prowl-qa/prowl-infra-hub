@@ -4,7 +4,7 @@ import { toDisplayDate } from '@/lib/format';
 interface PlaybookCardProps {
   playbook: PlaybookSummary;
   showTags?: boolean;
-  onPreview?: () => void;
+  onPreview?: (playbook: PlaybookSummary) => void | Promise<void>;
 }
 
 export default function PlaybookCard({ playbook, showTags = true, onPreview }: PlaybookCardProps) {
@@ -71,7 +71,7 @@ export default function PlaybookCard({ playbook, showTags = true, onPreview }: P
 
       <div className="playbook-actions">
         {onPreview && (
-          <button type="button" className="button button-ghost" onClick={onPreview}>
+          <button type="button" className="button button-ghost" onClick={() => void onPreview(playbook)}>
             Preview YAML
           </button>
         )}
