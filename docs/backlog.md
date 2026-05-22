@@ -27,9 +27,6 @@
 {PQIH-012} **INFRA-012: Full-stack compatibility (OS + cloud + hardware)**
     Extend compatibility matrix to include cloud provider + instance type and physical hardware (Dell PowerEdge, etc.). Requires dedicated test infrastructure.
 
-{PQIH-013} **INFRA-013: Sort options on browse page**
-    Add sort controls (newest, alphabetical, most tasks, risk level). Default to alphabetical.
-
 {PQIH-014} **INFRA-014: Playbook detail page with OS compatibility matrix**
     Create `/browse/[category]/[name]` route showing full YAML, metadata, test results, related playbooks from the same category, and a per-OS compatibility matrix sourced from the `tested_on` jsonb column (Ubuntu 22.04, RHEL 9, Amazon Linux 2023, Debian 12, etc.). The CLI already records per-OS results via the `--os` flag; this item covers surfacing them in the UI. (Merged from former PQIH-007 / INFRA-007.)
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from 'react';
+import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import PlaybookCard from '@/components/playbook-card';
@@ -8,6 +8,67 @@ import { toDisplayDate } from '@/lib/format';
 import type { PlaybookSummary } from '@/lib/playbooks';
 
 const ITEMS_PER_PAGE = 12;
+
+const SORT_OPTIONS = ['alphabetical', 'newest', 'most-tasks', 'risk-level'] as const;
+type SortOption = (typeof SORT_OPTIONS)[number];
+const DEFAULT_SORT: SortOption = 'alphabetical';
+const PREVIEW_ERROR_MESSAGE = 'Failed to load playbook content.';
+const RISK_FILTER_OPTIONS = [
+  { key: 'all', label: 'All levels' },
+  { key: 'low', label: 'Low' },
+  { key: 'medium', label: 'Medium' },
+  { key: 'high', label: 'High' },
+] as const;
+const RISK_FILTER_VALUES = RISK_FILTER_OPTIONS.map((option) => option.key);
+
+function isSortOption(value: string): value is SortOption {
+  return (SORT_OPTIONS as readonly string[]).includes(value);
+}
+
+function normalizeFilterParam(value: string | null, allowedValues: readonly string[]): string {
+  return value && allowedValues.includes(value) ? value : 'all';
+}
+
+const RISK_RANK: Record<PlaybookSummary['riskLevel'], number> = {
+  high: 3,
+  medium: 2,
+  low: 1,
+};
+
+function compareByTitle(a: PlaybookSummary, b: PlaybookSummary): number {
+  return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+}
+
+function compareByUpdatedAt(a: PlaybookSummary, b: PlaybookSummary): number {
+  // Newest first — descending by ISO date string. ISO strings sort lexicographically
+  // in the same order as chronologically, so direct string comparison is safe.
+  if (a.updatedAt === b.updatedAt) return 0;
+  return a.updatedAt > b.updatedAt ? -1 : 1;
+}
+
+function compareByTaskCount(a: PlaybookSummary, b: PlaybookSummary): number {
+  return b.taskCount - a.taskCount;
+}
+
+function compareByRisk(a: PlaybookSummary, b: PlaybookSummary): number {
+  // High → low: a riskier playbook ranks first so reviewers see them up front.
+  return RISK_RANK[b.riskLevel] - RISK_RANK[a.riskLevel];
+}
+
+function sortPlaybooks(playbooks: PlaybookSummary[], sort: SortOption): PlaybookSummary[] {
+  const copy = [...playbooks];
+  switch (sort) {
+    case 'newest':
+      return copy.sort((a, b) => compareByUpdatedAt(a, b) || compareByTitle(a, b));
+    case 'most-tasks':
+      return copy.sort((a, b) => compareByTaskCount(a, b) || compareByTitle(a, b));
+    case 'risk-level':
+      return copy.sort((a, b) => compareByRisk(a, b) || compareByTitle(a, b));
+    case 'alphabetical':
+    default:
+      return copy.sort(compareByTitle);
+  }
+}
 
 interface BrowseShellProps {
   playbooks: PlaybookSummary[];
@@ -43,22 +104,14 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const category = searchParams.get('category') || 'all';
-  const toolFilter = searchParams.get('tool') || 'all';
-  const riskFilter = searchParams.get('risk') || 'all';
-  const cloudFilter = searchParams.get('cloud') || 'all';
-  const currentPage = Math.max(1, Number(searchParams.get('page')) || 1);
+  const categoryParam: string | null = searchParams.get('category');
+  const toolParam: string | null = searchParams.get('tool');
+  const riskParam: string | null = searchParams.get('risk');
+  const cloudParam: string | null = searchParams.get('cloud');
+  const sortParam: string | null = searchParams.get('sort');
+  const pageParam: string | null = searchParams.get('page');
 
-  const [query, setQuery] = useState('');
-  const [selectedPlaybook, setSelectedPlaybook] = useState<PlaybookSummary | null>(null);
-  const [previewContent, setPreviewContent] = useState<string | null>(null);
-  const [copyState, setCopyState] = useState<'idle' | 'done' | 'failed'>('idle');
-  const modalPanelRef = useRef<HTMLDivElement | null>(null);
-  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
-  const triggerRef = useRef<HTMLElement | null>(null);
-  const previewRequestIdRef = useRef(0);
-
-  const categories = useMemo(
+  const categories = React.useMemo(
     () => [
       { key: 'all', label: 'All' },
       ...Array.from(new Set(playbooks.map((p) => p.category))).map((key) => ({
@@ -69,20 +122,42 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
     [playbooks]
   );
 
-  const tools = useMemo(() => {
+  const tools = React.useMemo(() => {
     const set = new Set(playbooks.map((p) => p.tool));
     return ['all', ...Array.from(set).sort()];
   }, [playbooks]);
 
-  const cloudProviders = useMemo(() => {
+  const cloudProviders = React.useMemo(() => {
     const set = new Set(playbooks.map((p) => p.cloudProvider));
     return ['all', ...Array.from(set).sort()];
   }, [playbooks]);
 
-  const filteredPlaybooks = useMemo(() => {
+  const category: string = normalizeFilterParam(
+    categoryParam,
+    categories.map((entry) => entry.key)
+  );
+  const toolFilter: string = normalizeFilterParam(toolParam, tools);
+  const riskFilter: string = normalizeFilterParam(riskParam, RISK_FILTER_VALUES);
+  const cloudFilter: string = normalizeFilterParam(cloudParam, cloudProviders);
+  const sortValue: string = sortParam ?? DEFAULT_SORT;
+  const sortOption: SortOption = isSortOption(sortValue) ? sortValue : DEFAULT_SORT;
+  const pageValue = pageParam ? Number(pageParam) : 1;
+  const currentPage = Number.isFinite(pageValue) && Number.isInteger(pageValue) && pageValue >= 1 ? pageValue : 1;
+
+  const [query, setQuery] = React.useState('');
+  const [selectedPlaybook, setSelectedPlaybook] = React.useState<PlaybookSummary | null>(null);
+  const [previewContent, setPreviewContent] = React.useState<string | null>(null);
+  const [previewError, setPreviewError] = React.useState<string | null>(null);
+  const [copyState, setCopyState] = React.useState<'idle' | 'done' | 'failed'>('idle');
+  const modalPanelRef = React.useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const triggerRef = React.useRef<HTMLElement | null>(null);
+  const previewRequestIdRef = React.useRef(0);
+
+  const filteredPlaybooks = React.useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
-    return playbooks.filter((playbook) => {
+    const filtered = playbooks.filter((playbook) => {
       const categoryMatch = category === 'all' || playbook.category === category;
       const toolMatch = toolFilter === 'all' || playbook.tool === toolFilter;
       const riskMatch = riskFilter === 'all' || playbook.riskLevel === riskFilter;
@@ -94,7 +169,9 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
 
       return categoryMatch && toolMatch && riskMatch && cloudMatch && queryMatch;
     });
-  }, [playbooks, query, category, toolFilter, riskFilter, cloudFilter]);
+
+    return sortPlaybooks(filtered, sortOption);
+  }, [playbooks, query, category, toolFilter, riskFilter, cloudFilter, sortOption]);
 
   const totalPages = Math.max(1, Math.ceil(filteredPlaybooks.length / ITEMS_PER_PAGE));
   const safePage = Math.min(currentPage, totalPages);
@@ -102,11 +179,15 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
   const paginatedPlaybooks = filteredPlaybooks.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   const pageNumbers = buildPageNumbers(safePage, totalPages);
 
-  const updateUrl = useCallback(
-    (page: number, params: Record<string, string>) => {
+  const updateUrl = React.useCallback(
+    (page: number, params: Record<string, string>): void => {
       const urlParams = new URLSearchParams();
       for (const [key, value] of Object.entries(params)) {
-        if (value !== 'all') urlParams.set(key, value);
+        // Keep the URL clean: omit defaults ("all" for the filter chips, the
+        // alphabetical default for sort).
+        if (key === 'sort' && value === DEFAULT_SORT) continue;
+        if (key !== 'sort' && value === 'all') continue;
+        urlParams.set(key, value);
       }
       if (page > 1) urlParams.set('page', String(page));
       const qs = urlParams.toString();
@@ -115,29 +196,42 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
     [router]
   );
 
-  const closePreview = useCallback(() => {
+  const closePreview = React.useCallback(() => {
     previewRequestIdRef.current += 1;
     setSelectedPlaybook(null);
     setPreviewContent(null);
+    setPreviewError(null);
     setCopyState('idle');
   }, []);
 
-  function handleFilterChange(key: string, value: string) {
-    const params: Record<string, string> = { category, tool: toolFilter, risk: riskFilter, cloud: cloudFilter };
+  function handleFilterChange(key: string, value: string): void {
+    const params: Record<string, string> = {
+      category,
+      tool: toolFilter,
+      risk: riskFilter,
+      cloud: cloudFilter,
+      sort: sortOption,
+    };
     params[key] = value;
-    startTransition(() => {
+    React.startTransition(() => {
       updateUrl(1, params);
     });
   }
 
-  function handlePageChange(page: number) {
-    startTransition(() => {
-      updateUrl(page, { category, tool: toolFilter, risk: riskFilter, cloud: cloudFilter });
+  function handlePageChange(page: number): void {
+    React.startTransition(() => {
+      updateUrl(page, {
+        category,
+        tool: toolFilter,
+        risk: riskFilter,
+        cloud: cloudFilter,
+        sort: sortOption,
+      });
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  async function handlePreview(playbook: PlaybookSummary) {
+  async function handlePreview(playbook: PlaybookSummary): Promise<void> {
     const activeElement = document.activeElement;
     if (activeElement instanceof HTMLElement) {
       triggerRef.current = activeElement;
@@ -146,6 +240,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
     const requestId = ++previewRequestIdRef.current;
     setSelectedPlaybook(playbook);
     setPreviewContent(null);
+    setPreviewError(null);
     setCopyState('idle');
 
     try {
@@ -156,18 +251,29 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
       if (response.ok) {
         setPreviewContent(await response.text());
       } else {
-        setPreviewContent('# Failed to load playbook content');
+        setPreviewContent(null);
+        setPreviewError(PREVIEW_ERROR_MESSAGE);
+        setCopyState('idle');
       }
     } catch {
       if (requestId !== previewRequestIdRef.current) {
         return;
       }
-      setPreviewContent('# Failed to load playbook content');
+      setPreviewContent(null);
+      setPreviewError(PREVIEW_ERROR_MESSAGE);
+      setCopyState('idle');
     }
   }
 
-  async function handleCopy() {
-    if (!previewContent) return;
+  function handlePreviewError(_error: unknown, playbook: PlaybookSummary): void {
+    setSelectedPlaybook(playbook);
+    setPreviewContent(null);
+    setPreviewError(PREVIEW_ERROR_MESSAGE);
+    setCopyState('idle');
+  }
+
+  async function handleCopy(): Promise<void> {
+    if (!previewContent || previewError !== null) return;
 
     try {
       await navigator.clipboard.writeText(previewContent);
@@ -181,7 +287,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
     }, 1400);
   }
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (!selectedPlaybook) {
       if (triggerRef.current) {
         triggerRef.current.focus();
@@ -256,7 +362,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
             type="search"
             placeholder="Try patching, nginx, docker..."
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event: React.ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)}
           />
         </label>
 
@@ -280,7 +386,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
             <select
               id="filter-tool"
               value={toolFilter}
-              onChange={(e) => handleFilterChange('tool', e.target.value)}
+              onChange={(event: React.ChangeEvent<HTMLSelectElement>) => handleFilterChange('tool', event.target.value)}
             >
               {tools.map((t) => (
                 <option key={t} value={t}>{t === 'all' ? 'All tools' : t}</option>
@@ -293,12 +399,11 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
             <select
               id="filter-risk"
               value={riskFilter}
-              onChange={(e) => handleFilterChange('risk', e.target.value)}
+              onChange={(event: React.ChangeEvent<HTMLSelectElement>) => handleFilterChange('risk', event.target.value)}
             >
-              <option value="all">All levels</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
+              {RISK_FILTER_OPTIONS.map((option) => (
+                <option key={option.key} value={option.key}>{option.label}</option>
+              ))}
             </select>
           </div>
 
@@ -307,11 +412,25 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
             <select
               id="filter-cloud"
               value={cloudFilter}
-              onChange={(e) => handleFilterChange('cloud', e.target.value)}
+              onChange={(event: React.ChangeEvent<HTMLSelectElement>) => handleFilterChange('cloud', event.target.value)}
             >
               {cloudProviders.map((c) => (
                 <option key={c} value={c}>{c === 'all' ? 'All providers' : c}</option>
               ))}
+            </select>
+          </div>
+
+          <div className="filter-group">
+            <label htmlFor="filter-sort">Sort by</label>
+            <select
+              id="filter-sort"
+              value={sortOption}
+              onChange={(event: React.ChangeEvent<HTMLSelectElement>) => handleFilterChange('sort', event.target.value)}
+            >
+              <option value="alphabetical">Alphabetical (A–Z)</option>
+              <option value="newest">Newest first</option>
+              <option value="most-tasks">Most tasks</option>
+              <option value="risk-level">Risk level (high → low)</option>
             </select>
           </div>
         </div>
@@ -329,7 +448,8 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
             <PlaybookCard
               key={playbook.id}
               playbook={playbook}
-              onPreview={() => handlePreview(playbook)}
+              onPreview={handlePreview}
+              onPreviewError={handlePreviewError}
             />
           ))
         )}
@@ -389,7 +509,7 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
             aria-modal="true"
             aria-labelledby="preview-title"
             tabIndex={-1}
-            onClick={(event) => event.stopPropagation()}
+            onClick={(event: React.MouseEvent<HTMLDivElement>) => event.stopPropagation()}
           >
             <div className="modal-head">
               <h3 id="preview-title">{selectedPlaybook.title}</h3>
@@ -415,16 +535,22 @@ export default function BrowseShell({ playbooks }: BrowseShellProps) {
               </p>
             )}
 
-            <pre>
-              <code>{previewContent ?? 'Loading...'}</code>
-            </pre>
+            {previewError ? (
+              <p className="dialog-meta" role="alert">
+                {previewError}
+              </p>
+            ) : (
+              <pre>
+                <code>{previewContent ?? 'Loading...'}</code>
+              </pre>
+            )}
 
             <div className="dialog-actions">
               <button
                 type="button"
                 className="button button-ghost"
                 onClick={handleCopy}
-                disabled={!previewContent}
+                disabled={!previewContent || previewError !== null}
               >
                 {copyState === 'done' && 'Copied'}
                 {copyState === 'failed' && 'Copy failed'}
