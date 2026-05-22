@@ -46,6 +46,9 @@ export async function GET(request: Request) {
     const segments = filePath.split('/');
     const category = segments[0] || '';
     const playbookName = (segments[segments.length - 1] || '').replace(/\.yml$/, '');
+    const userAgent = request.headers.get('user-agent') ?? undefined;
+    const referer = request.headers.get('referer') ?? undefined;
+    const country = request.headers.get('cf-ipcountry') ?? undefined;
 
     // Schedule the tracking POST to run after the response has been sent.
     // `after()` keeps the Vercel function context alive until the POST
@@ -56,9 +59,9 @@ export async function GET(request: Request) {
         playbookPath: filePath,
         category,
         playbookName,
-        userAgent: request.headers.get('user-agent') ?? undefined,
-        referer: request.headers.get('referer') ?? undefined,
-        country: request.headers.get('cf-ipcountry') ?? undefined,
+        userAgent,
+        referer,
+        country,
       }),
     );
   }
