@@ -39,8 +39,6 @@
 {PQIH-021} **INFRA-057: Configure Upstash for distributed rate limiting on Vercel**
     `lib/rate-limit.ts:180` reads `process.env.UPSTASH_REDIS_REST_URL` and `process.env.UPSTASH_REDIS_REST_TOKEN`; when both are present it constructs `UpstashRateLimitStore`, otherwise it uses `MemoryRateLimitStore`. If the shared store is unset or unavailable, fallback enforcement is best-effort per runtime instance rather than globally shared. Provision an Upstash Redis instance (free tier is fine for current traffic), set both env vars in Vercel, and redeploy. Verify by hitting an API endpoint repeatedly from one IP and confirming 429s occur at the configured threshold across multiple runtime instances after Upstash is provisioned.
 
-{PQIH-023} **INFRA-059: Fix `trackDownload` fire-and-forget race on Vercel**
-    `lib/tracking.ts` currently calls `fetch()` without awaiting it. In Vercel's serverless model the function execution context can be torn down before the network POST completes, killing the in-flight tracking request. Empirically observed 2026-05-22 while verifying PQIH-022: 1–2 out of 3 tracking POSTs landed in `infra_hub_downloads`, the rest were silently dropped (the `.catch(() => {})` swallows the abort). Fix: use Next.js's `after()` API (or `revalidate`/`waitUntil` equivalents on the route handler) inside `app/api/playbooks/file/route.ts` to extend the function lifetime until the tracking POST settles. Mirrors prowl-hub's matching item.
 
 ---
 
