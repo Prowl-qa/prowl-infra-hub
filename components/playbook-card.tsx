@@ -4,10 +4,11 @@ import { toDisplayDate } from '@/lib/format';
 interface PlaybookCardProps {
   playbook: PlaybookSummary;
   showTags?: boolean;
-  onPreview?: () => void;
+  onPreview?: (playbook: PlaybookSummary) => void | Promise<void>;
+  onPreviewError?: (error: unknown, playbook: PlaybookSummary) => void;
 }
 
-export default function PlaybookCard({ playbook, showTags = true, onPreview }: PlaybookCardProps) {
+export default function PlaybookCard({ playbook, showTags = true, onPreview, onPreviewError }: PlaybookCardProps) {
   const tags = (playbook.tags || []).filter((tag) => tag.trim().length > 0 && !tag.trim().startsWith('#'));
 
   return (
@@ -71,7 +72,17 @@ export default function PlaybookCard({ playbook, showTags = true, onPreview }: P
 
       <div className="playbook-actions">
         {onPreview && (
-          <button type="button" className="button button-ghost" onClick={onPreview}>
+          <button
+            type="button"
+            className="button button-ghost"
+            onClick={async () => {
+              try {
+                await onPreview(playbook);
+              } catch (error) {
+                onPreviewError?.(error, playbook);
+              }
+            }}
+          >
             Preview YAML
           </button>
         )}
