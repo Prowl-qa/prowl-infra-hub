@@ -20,10 +20,6 @@ async function fetchFeaturedPlaybooks(allPlaybooks: PlaybookSummary[]): Promise<
     .filter((p): p is PlaybookSummary => p != null);
 }
 
-// TODO(PQIH-022): re-enable Total downloads metric once Beelink stats are
-// scoped per-hub. The Beelink counter is currently global, so prowl-hub and
-// prowl-infra-hub both surface the same number. Function is kept here for
-// quick re-enable when scoping lands.
 async function fetchTotalDownloads(): Promise<string> {
   const result = await fetchStatsFromService({
     timeoutMs: 3000,
@@ -42,10 +38,11 @@ async function fetchTotalDownloads(): Promise<string> {
   return count.toLocaleString('en-US');
 }
 
-void fetchTotalDownloads;
-
 export default async function HomePage() {
-  const playbooks = await getPublishedPlaybookSummaries();
+  const [playbooks, totalDownloads] = await Promise.all([
+    getPublishedPlaybookSummaries(),
+    fetchTotalDownloads(),
+  ]);
 
   const featuredPlaybooks = await fetchFeaturedPlaybooks(playbooks);
 
@@ -110,7 +107,10 @@ playbook: |
           <p>{new Set(playbooks.map((p) => p.category)).size}</p>
           <span>Categories covered</span>
         </article>
-        {/* Total downloads metric temporarily hidden — see PQIH-022. */}
+        <article>
+          <p>{totalDownloads}</p>
+          <span>Total downloads</span>
+        </article>
       </section>
 
       <section className="featured container">
