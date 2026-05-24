@@ -8,14 +8,21 @@ export interface TestReport {
   passed: boolean;
   date: string;
   duration_ms: number;
-  driver: 'docker' | 'ec2';
-  testMode: 'check' | 'full';
+  driver: 'docker' | 'ec2' | 'terraform';
+  testMode: 'check' | 'full' | 'plan';
   environment?: {
     profile: string;
     instanceType: string;
     python: string;
     mac: string;
     label: string;
+  };
+  /** Terraform plan-mode driver step outputs (init / validate / plan). */
+  terraform?: {
+    init?: string;
+    validate?: string;
+    plan?: string;
+    planError?: string;
   };
   error?: string;
 }
