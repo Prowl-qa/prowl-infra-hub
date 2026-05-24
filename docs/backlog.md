@@ -12,9 +12,6 @@
 
 ## Low Priority / Post-Release
 
-{PQIH-008} **INFRA-008: Prowl Infra Test CLI — Terraform driver**
-   Add Terraform support to the test CLI: `terraform init` + `terraform validate` + `terraform plan`. Capture plan output in test report.
-
 {PQIH-009} **INFRA-009: Prowl Infra Test CLI — Docker Compose driver**
    Add Docker Compose support: `docker compose config` validation + `docker compose up --wait` with health checks.
 
@@ -34,8 +31,8 @@
     `.github/workflows/sync-to-database.yml` runs on a `self-hosted` runner and references a `DATABASE_URL` GitHub secret that isn't actually set. Last (and only) run cancelled after 24h on 2026-03-27. The workflow is supposed to upsert playbook YAML changes into the prod database on every push to main. Runtime catalog reads in `lib/playbooks.ts` try `dbQueries.getPublishedPlaybooks()` / `getPlaybookContent()` first and fall back to `lib/playbooks-fs.ts` only when the DB path throws, so the DB rows are the primary data path whenever the database is reachable. Decision: either (a) replace `runs-on: self-hosted` with `runs-on: ubuntu-latest`, add the Vercel Postgres `DATABASE_URL` (non-pooling) as a repo secret, and let GitHub-hosted runners do the sync, or (b) remove the workflow only if the runtime catalog is deliberately changed to use filesystem data as the primary source. If we want the DB rows for production catalog reads, analytics, or test-result writes later (see PQIH-020), pick (a).
 
 
-{PQIH-021} **INFRA-057: Configure Upstash for distributed rate limiting on Vercel**
-    `lib/rate-limit.ts:180` reads `process.env.UPSTASH_REDIS_REST_URL` and `process.env.UPSTASH_REDIS_REST_TOKEN`; when both are present it constructs `UpstashRateLimitStore`, otherwise it uses `MemoryRateLimitStore`. If the shared store is unset or unavailable, fallback enforcement is best-effort per runtime instance rather than globally shared. Provision an Upstash Redis instance (free tier is fine for current traffic), set both env vars in Vercel, and redeploy. Verify by hitting an API endpoint repeatedly from one IP and confirming 429s occur at the configured threshold across multiple runtime instances after Upstash is provisioned.
+{PQIH-025} **INFRA-061: Evaluate upgrading Terraform driver from Plan-Mode to Apply-Mode**
+    The plan-mode driver shipped in PQIH-008 catches syntax, schema, and provider-plugin issues but doesn't actually apply Terraform against real infrastructure. An apply-mode upgrade would mirror what PQIH-016 did for Ansible (EC2 spot driver) — provision short-lived cloud resources via OIDC, run `terraform apply` + `terraform destroy`, and verify the plan actually executes. Trade-offs to decide: (a) cost — real applies cost real money (NAT gateways, VPCs etc. priced per-hour) so we'd need spot/free-tier-only test profiles or a strict instance-type allowlist mirroring the EC2 IAM policy; (b) multi-cloud auth — the catalog has AWS, Azure, and GCP terraform playbooks, each needing its own OIDC trust + credential setup; (c) credential blast radius — apply-mode is destructive and requires broad IAM permissions per cloud, which is a meaningful step up from plan-mode's stub credentials. Evaluate whether the additional confidence is worth the operational complexity, and capture either a concrete implementation plan or an explicit decision to stay on plan-mode.
 
 
 ---

@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import { runAnsibleTest, getSupportedPlatforms } from './drivers/ansible';
 import { runEc2AnsibleTest, getSupportedEnvironments, getEnvironmentProfile } from './drivers/ansible-ec2';
+import { runTerraformTest, isTerraformInstalled } from './drivers/terraform';
 import { updatePlaybookYamlContent } from './playbook-metadata';
 import { writeReport, type TestReport } from './reporters/json';
 
@@ -144,6 +145,51 @@ async function resolveEc2Config(): Promise<Ec2Config> {
 // Test runners
 // ---------------------------------------------------------------------------
 
+async function runTerraformPlanModeTest(
+  playbookPath: string,
+  outputDir: string,
+  updateYaml: boolean,
+): Promise<boolean> {
+  if (!isTerraformInstalled()) {
+    console.log(`  Skipped — terraform CLI not on PATH (install via 'brew install terraform' or equivalent)`);
+    return true;
+  }
+
+  const result = await runTerraformTest({ playbookPath });
+
+  const report: TestReport = {
+    playbook: playbookPath,
+    tool: 'terraform',
+    testedOn: { os: result.os, arch: result.arch },
+    passed: result.passed,
+    date: new Date().toISOString(),
+    duration_ms: result.duration_ms,
+    driver: 'terraform',
+    testMode: 'plan',
+    terraform: result.output,
+    ...(result.error ? { error: result.error } : {}),
+  };
+
+  const reportPath = await writeReport(report, outputDir);
+  console.log(`  Result: ${result.passed ? 'PASSED' : 'FAILED'} (${result.duration_ms}ms)`);
+  console.log(`  Report: ${reportPath}`);
+
+  if (result.passed && result.output.planError) {
+    console.log(`  Note: validate passed but plan errored (likely provider auth / variable type)`);
+  }
+
+  if (result.error) {
+    console.log(`  Error: ${result.error.slice(0, 200)}`);
+  }
+
+  if (result.passed && updateYaml) {
+    await updatePlaybookYaml(playbookPath, result.os, result.arch);
+    console.log(`  Updated: ${playbookPath} with test metadata`);
+  }
+
+  return result.passed;
+}
+
 async function testPlaybookDocker(
   playbookPath: string,
   os: string | undefined,
@@ -159,6 +205,10 @@ async function testPlaybookDocker(
   console.log(`  Tool: ${tool}`);
   console.log(`  OS family: ${osFamily}`);
   console.log(`  Target: ${os || `auto (${osFamily})`}`);
+
+  if (tool === 'terraform') {
+    return runTerraformPlanModeTest(playbookPath, outputDir, updateYaml);
+  }
 
   if (tool !== 'ansible') {
     console.log(`  Skipped — ${tool} driver not yet implemented (Ansible-only MVP)`);
@@ -212,6 +262,14 @@ async function testPlaybookEc2(
   console.log(`  Driver: ec2 (full execution)`);
   console.log(`  Tool: ${tool}`);
   console.log(`  Environment: ${profile?.label || envProfile}`);
+
+  if (tool === 'terraform') {
+    // Terraform plan-mode doesn't deploy real resources, so the EC2 driver
+    // doesn't add anything over the local plan-mode test. Run it locally
+    // and emit the same report shape.
+    console.log(`  Note: terraform playbooks run in plan-mode (init + validate + plan) regardless of --driver.`);
+    return runTerraformPlanModeTest(playbookPath, outputDir, updateYaml);
+  }
 
   if (tool !== 'ansible') {
     console.log(`  Skipped — ${tool} driver not yet implemented (Ansible-only MVP)`);
@@ -380,9 +438,9 @@ async function main(): Promise<void> {
 
       const content = await fs.readFile(playbookPath, 'utf8');
       const tool = detectTool(content);
-      if (tool !== 'ansible') {
+      if (tool !== 'ansible' && tool !== 'terraform') {
         skipped++;
-        console.log(`\nSkipping: ${playbookPath} (${tool} — not supported in MVP)`);
+        console.log(`\nSkipping: ${playbookPath} (${tool} — driver not yet implemented)`);
         continue;
       }
 
