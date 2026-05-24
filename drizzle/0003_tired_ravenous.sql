@@ -1,3 +1,4 @@
+DROP INDEX IF EXISTS "idx_playbooks_search";--> statement-breakpoint
 ALTER TABLE "playbooks" drop column "search_vector";--> statement-breakpoint
 ALTER TABLE "playbooks" ADD COLUMN "search_vector" "tsvector" GENERATED ALWAYS AS (to_tsvector(
   'english',
@@ -7,4 +8,5 @@ ALTER TABLE "playbooks" ADD COLUMN "search_vector" "tsvector" GENERATED ALWAYS A
   coalesce(category, '') || ' ' ||
   coalesce(tags::text, '') || ' ' ||
   coalesce(compliance_tags::text, '')
-)) STORED;
+)) STORED;--> statement-breakpoint
+CREATE INDEX "idx_playbooks_search" ON "playbooks" USING gin ("search_vector");
