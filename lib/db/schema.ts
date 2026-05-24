@@ -18,7 +18,24 @@ const tsvector = customType<{ data: string }>({
   },
 });
 
-const playbooksSearchVectorSql = sql`to_tsvector('english', coalesce(title, '') || ' ' || coalesce(description, '') || ' ' || coalesce(name, ''))`;
+// Full-text search target. Includes the human-readable text fields
+// (title, description, name) plus the categorical / taxonomy fields
+// (category, tags, compliance_tags) so that queries like `?q=patching`
+// or `?q=hipaa` match playbooks by category or tag name in addition to
+// content. jsonb arrays are cast to text — to_tsvector tokenizes through
+// the JSON punctuation and surfaces the inner array values as searchable
+// terms. All composed operators (||, coalesce, ::text, to_tsvector with
+// a fixed config) are IMMUTABLE, which is required for use in a
+// `GENERATED ALWAYS AS (...) STORED` column.
+const playbooksSearchVectorSql = sql`to_tsvector(
+  'english',
+  coalesce(title, '') || ' ' ||
+  coalesce(description, '') || ' ' ||
+  coalesce(name, '') || ' ' ||
+  coalesce(category, '') || ' ' ||
+  coalesce(tags::text, '') || ' ' ||
+  coalesce(compliance_tags::text, '')
+)`;
 
 export const playbooks = pgTable(
   'playbooks',
