@@ -1,4 +1,4 @@
-# ProwlQA config for testing the Prowl Infra Hub site
+# Prowl config for testing the Prowl Infra Hub site
 # Run the dev server first: npm run dev (port 3004)
 
 target:
