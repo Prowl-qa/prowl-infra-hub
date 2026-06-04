@@ -434,7 +434,7 @@ async function main(): Promise<void> {
     if (outcome === 'passed') passed++;
     else if (outcome === 'failed') failed++;
     else skipped++;
-  }
+  };
 
   try {
     for (const playbookPath of playbooks) {

@@ -158,3 +158,17 @@ test('isNonProviderPlanError distinguishes provider auth from catalog defects', 
   assert.equal(isNonProviderPlanError('Error: No valid credential sources found'), false);
   assert.equal(isNonProviderPlanError('Error: Cloudflare API token is required'), false);
 });
+
+test('isNonProviderPlanError tolerates provider authentication failures', () => {
+  assert.equal(
+    isNonProviderPlanError('Error: No valid credential sources found for AWS Provider'),
+    false,
+  );
+});
+
+test('isNonProviderPlanError fails missing required Terraform variables', () => {
+  assert.equal(
+    isNonProviderPlanError('Error: No value for required variable\nThe root input variable "region" is not set.'),
+    true,
+  );
+});
