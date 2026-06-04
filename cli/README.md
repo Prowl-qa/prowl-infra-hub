@@ -1,7 +1,7 @@
-# @prowlqa/infra-cli
+# prowl-infra
 
 `prowl-infra` is a command-line tool for testing Ansible playbooks published in
-the [Prowl Infra Hub](https://github.com/Prowl-qa/prowl-infra-hub) catalog. It
+the [Prowl Infra Hub](https://github.com/prowl-tools/prowl-infra-hub) catalog. It
 runs each playbook either inside a local Docker container (fast, syntax-level
 checks) or against an ephemeral spot EC2 instance (full execution against a
 real Linux host).
@@ -9,7 +9,7 @@ real Linux host).
 ## Install
 
 ```bash
-npm install -g @prowlqa/infra-cli
+npm install -g prowl-infra
 ```
 
 Requires Node.js 20+.
@@ -38,7 +38,7 @@ prowl-infra test --environments
 
 The EC2 driver requires AWS credentials in the current shell (or via OIDC in
 CI) and the following environment variables that point at the test
-infrastructure created by [`infra/ec2-test-env`](https://github.com/Prowl-qa/prowl-infra-hub/tree/main/infra/ec2-test-env):
+infrastructure created by [`infra/ec2-test-env`](https://github.com/prowl-tools/prowl-infra-hub/tree/main/infra/ec2-test-env):
 
 - `EC2_SUBNET_ID`
 - `EC2_SECURITY_GROUP_ID`
@@ -52,9 +52,9 @@ pip install molecule 'ansible-core>=2.15,<2.18' boto3 botocore
 ansible-galaxy collection install amazon.aws community.aws
 ```
 
-See [docs/ec2-testing.md](https://github.com/Prowl-qa/prowl-infra-hub/blob/main/docs/ec2-testing.md)
+See [docs/ec2-testing.md](https://github.com/prowl-tools/prowl-infra-hub/blob/main/docs/ec2-testing.md)
 for the full walkthrough.
 
 ## License
 
-[Apache 2.0](https://github.com/Prowl-qa/prowl-infra-hub/blob/main/LICENSE)
+[Apache 2.0](https://github.com/prowl-tools/prowl-infra-hub/blob/main/LICENSE)

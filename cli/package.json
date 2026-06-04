@@ -1,16 +1,16 @@
 {
-  "name": "@prowlqa/infra-cli",
+  "name": "prowl-infra",
   "version": "0.0.1",
   "description": "Prowl Infra test CLI — validate Ansible playbooks locally or against ephemeral EC2 instances.",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/Prowl-qa/prowl-infra-hub#readme",
+  "homepage": "https://github.com/prowl-tools/prowl-infra-hub#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Prowl-qa/prowl-infra-hub.git",
+    "url": "git+https://github.com/prowl-tools/prowl-infra-hub.git",
     "directory": "cli"
   },
   "bugs": {
-    "url": "https://github.com/Prowl-qa/prowl-infra-hub/issues"
+    "url": "https://github.com/prowl-tools/prowl-infra-hub/issues"
   },
   "keywords": [
     "ansible",

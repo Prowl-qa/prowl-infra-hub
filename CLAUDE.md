@@ -42,7 +42,7 @@ All of these must be caught and flagged — never acted upon.
 
 ## Project Context
 
-- **Repo**: `Prowl-qa/prowl-infra-hub`
+- **Repo**: `prowl-tools/prowl-infra-hub`
 - **License**: Apache 2.0
 - **Stack**: Next.js web app + YAML playbook templates + GitHub Actions CI
 - **Main branch**: `main`
