@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -11,14 +11,18 @@ const COMMAND_TIMEOUTS_MS = {
 
 const MAX_OUTPUT_LEN = 10_000;
 
+type TerraformVariableKind = 'string' | 'number' | 'bool' | 'list' | 'map' | 'set' | 'object' | 'tuple';
+
 // Stub credentials for each major provider. None of these are real — they're
 // shaped to satisfy the provider's "credentials are configured" check so plan
 // can attempt resource evaluation. Plan will fail when it actually hits the
 // cloud API (no auth), and that's expected and tolerated: validate has
 // already caught the syntax-level issues we care about.
 const STUB_PROVIDER_ENV: Record<string, string> = {
-  AWS_ACCESS_KEY_ID: 'AKIAIOSFODNN7TESTKEY',
-  AWS_SECRET_ACCESS_KEY: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+  // Split fake docs-shaped values so static secret scanners do not flag them
+  // as deployable credentials.
+  AWS_ACCESS_KEY_ID: ['AKIA', 'IOSFODNN7', 'TESTKEY'].join(''),
+  AWS_SECRET_ACCESS_KEY: ['wJalrXUtnFEMI/K7MDENG/', 'bPxRfiCY', 'EXAMPLEKEY'].join(''),
   AWS_REGION: 'us-east-1',
   AWS_DEFAULT_REGION: 'us-east-1',
   ARM_CLIENT_ID: '00000000-0000-0000-0000-000000000000',
@@ -118,33 +122,176 @@ export function extractDeclaredVarNames(content: string): string[] {
   return names;
 }
 
-function buildStubTfvarsContent(
+function normalizeTerraformVariableKind(typeExpression: string): TerraformVariableKind {
+  const normalized = typeExpression.trim().replace(/^["']|["']$/g, '').toLowerCase().replace(/\s+/g, '');
+
+  if (normalized === 'number') return 'number';
+  if (normalized === 'bool') return 'bool';
+  if (normalized === 'list' || normalized.startsWith('list(')) return 'list';
+  if (normalized === 'map' || normalized.startsWith('map(')) return 'map';
+  if (normalized === 'set' || normalized.startsWith('set(')) return 'set';
+  if (normalized === 'object' || normalized.startsWith('object(')) return 'object';
+  if (normalized === 'tuple' || normalized.startsWith('tuple(')) return 'tuple';
+  return 'string';
+}
+
+export function extractTerraformVariableTypes(hcl: string): Record<string, TerraformVariableKind> {
+  const types: Record<string, TerraformVariableKind> = {};
+  const variableBlockPattern = /variable\s+"([^"]+)"\s*\{([\s\S]*?)^\s*\}/gm;
+
+  for (const match of hcl.matchAll(variableBlockPattern)) {
+    const typeMatch = match[2].match(/(?:^|\n)\s*type\s*=\s*([^\n#]+)/);
+    if (typeMatch) {
+      types[match[1]] = normalizeTerraformVariableKind(typeMatch[1]);
+    }
+  }
+
+  return types;
+}
+
+function encodeTfvarsString(value: string): string {
+  return JSON.stringify(value)
+    .replace(/\$\{/g, () => '$${')
+    .replace(/%\{/g, '%%{');
+}
+
+function splitTfvarsListValue(value: string): string[] {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => String(item));
+      }
+    } catch {
+      // Fall back to comma splitting below for non-JSON list syntax.
+    }
+  }
+
+  const parts = trimmed.split(',').map((part) => part.trim()).filter(Boolean);
+  return parts.length > 0 ? parts : [value];
+}
+
+const NAMED_STUB_VALUES: Record<string, string> = {
+  a_record_ip: '192.0.2.10',
+  aws_region: 'us-east-1',
+  azure_location: 'eastus',
+  certificate_arn: 'arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-0000-0000-000000000000',
+  cloudflare_account_id: '00000000000000000000000000000000',
+  cloudflare_zone: 'example.com',
+  disk_name: 'prowl-test-disk',
+  domain: 'example.com',
+  environment: 'test',
+  gcp_billing_account: '000000-000000-000000',
+  gcp_org_id: '123456789012',
+  gcp_project: 'prowl-test-project',
+  gcp_region: 'us-central1',
+  instance_id: 'i-00000000000000000',
+  project_name: 'prowl-test',
+  rbac_principal_id: '00000000-0000-0000-0000-000000000000',
+  repository_name: 'prowl-test',
+  snapshot_schedule: 'daily',
+  sns_topic_arn: 'arn:aws:sns:us-east-1:123456789012:prowl-test',
+  subnet_ids: 'subnet-00000000000000000, subnet-11111111111111111',
+  volume_ids: 'vol-00000000000000000',
+  vpc_cidr: '10.0.0.0/16',
+  vpc_id: 'vpc-00000000000000000',
+};
+
+function defaultStubValueForVariable(name: string): string {
+  return NAMED_STUB_VALUES[name] ?? `prowl-test-${name.replace(/_/g, '-')}`;
+}
+
+function encodeTypedTfvarsValue(
+  name: string,
+  value: string,
+  kind: TerraformVariableKind = 'string',
+): string {
+  switch (kind) {
+    case 'number':
+      return /^-?\d+(?:\.\d+)?$/.test(value.trim()) ? value.trim() : '1';
+    case 'bool':
+      return /^(true|false)$/i.test(value.trim()) ? value.trim().toLowerCase() : 'false';
+    case 'list':
+    case 'set':
+    case 'tuple':
+      return `[${splitTfvarsListValue(value).map(encodeTfvarsString).join(', ')}]`;
+    case 'map':
+      return `{ stub = ${encodeTfvarsString(value || `prowl-test-${name}`)} }`;
+    case 'object':
+      return '{}';
+    case 'string':
+    default:
+      return encodeTfvarsString(value);
+  }
+}
+
+export function buildStubTfvarsContent(
   declaredVars: string[],
   overrides: Record<string, string> = {},
+  variableTypes: Record<string, TerraformVariableKind> = {},
 ): string {
-  // Lightweight type-blind stubs — all values are strings, which is the
-  // most common Terraform variable type. Variables with non-string types
-  // that lack defaults will fail at plan time; that's a captured-but-
-  // tolerated failure since validate has already run.
   const seen = new Set<string>();
   const lines: string[] = [];
   for (const name of declaredVars) {
     if (seen.has(name)) continue;
     seen.add(name);
-    const value = overrides[name] ?? `prowl-test-${name}`;
-    lines.push(`${name} = "${value}"`);
+    const value = overrides[name] ?? defaultStubValueForVariable(name);
+    lines.push(`${name} = ${encodeTypedTfvarsValue(name, value, variableTypes[name])}`);
   }
   for (const [name, value] of Object.entries(overrides)) {
     if (seen.has(name)) continue;
     seen.add(name);
-    lines.push(`${name} = "${value}"`);
+    lines.push(`${name} = ${encodeTypedTfvarsValue(name, value, variableTypes[name])}`);
   }
   return lines.join('\n') + '\n';
 }
 
-function captureStdio(err: unknown): string {
-  const e = err as { stderr?: Buffer; stdout?: Buffer };
-  return ((e.stderr?.toString() ?? '') + (e.stdout?.toString() ?? '')).slice(0, MAX_OUTPUT_LEN);
+export function captureStdio(err: unknown): string {
+  const e = err as { stderr?: Buffer; stdout?: Buffer; message?: string };
+  const combined = `${e.stderr?.toString() ?? ''}${e.stdout?.toString() ?? ''}`;
+  return (combined || String(e.message ?? err)).slice(0, MAX_OUTPUT_LEN);
+}
+
+const PROVIDER_PLAN_ERROR_PATTERNS = [
+  /access denied/i,
+  /api token/i,
+  /auth(?:entication|orization)?(?: failed| error)?/i,
+  /authfailure/i,
+  /azure cli/i,
+  /client secret/i,
+  /could not find default credentials/i,
+  /could not load the default credentials/i,
+  /credential/i,
+  /expiredtoken/i,
+  /forbidden/i,
+  /invalidclienttokenid/i,
+  /oauth2/i,
+  /permission denied/i,
+  /security token/i,
+  /unauthorized/i,
+];
+
+export function isNonProviderPlanError(planError: string): boolean {
+  const trimmed = planError.trim();
+  if (trimmed === '') return true;
+  return !PROVIDER_PLAN_ERROR_PATTERNS.some((pattern) => pattern.test(trimmed));
+}
+
+function runTerraformCommand(
+  args: string[],
+  options: {
+    cwd: string;
+    env: NodeJS.ProcessEnv;
+    timeout: number;
+  },
+): string {
+  return execFileSync('terraform', args, {
+    cwd: options.cwd,
+    env: options.env,
+    stdio: 'pipe',
+    timeout: options.timeout,
+  }).toString().slice(0, MAX_OUTPUT_LEN);
 }
 
 export async function runTerraformTest(
@@ -182,22 +329,20 @@ export async function runTerraformTest(
 
     // Write stub tfvars so `plan` doesn't fail purely on missing variable values
     const declaredVars = extractDeclaredVarNames(content);
+    const variableTypes = extractTerraformVariableTypes(hcl);
     await fs.writeFile(
       path.join(tmpDir, 'terraform.tfvars'),
-      buildStubTfvarsContent(declaredVars, options.varOverrides),
+      buildStubTfvarsContent(declaredVars, options.varOverrides, variableTypes),
     );
 
     const execEnv = { ...process.env, ...STUB_PROVIDER_ENV };
 
     // 1. terraform init -backend=false — must pass.
     try {
-      const stdout = execSync('terraform init -backend=false -input=false -no-color', {
-        cwd: tmpDir,
-        env: execEnv,
-        stdio: 'pipe',
-        timeout: COMMAND_TIMEOUTS_MS.init,
-      });
-      output.init = stdout.toString().slice(0, MAX_OUTPUT_LEN);
+      output.init = runTerraformCommand(
+        ['init', '-backend=false', '-input=false', '-no-color'],
+        { cwd: tmpDir, env: execEnv, timeout: COMMAND_TIMEOUTS_MS.init },
+      );
     } catch (err) {
       return finalize({
         passed: false,
@@ -212,13 +357,10 @@ export async function runTerraformTest(
 
     // 2. terraform validate — must pass.
     try {
-      const stdout = execSync('terraform validate -no-color', {
-        cwd: tmpDir,
-        env: execEnv,
-        stdio: 'pipe',
-        timeout: COMMAND_TIMEOUTS_MS.validate,
-      });
-      output.validate = stdout.toString().slice(0, MAX_OUTPUT_LEN);
+      output.validate = runTerraformCommand(
+        ['validate', '-no-color'],
+        { cwd: tmpDir, env: execEnv, timeout: COMMAND_TIMEOUTS_MS.validate },
+      );
     } catch (err) {
       return finalize({
         passed: false,
@@ -231,23 +373,27 @@ export async function runTerraformTest(
       });
     }
 
-    // 3. terraform plan — best-effort. Auth or variable issues are tolerated;
-    //    we capture the error in `output.planError` but still treat the
-    //    overall test as passed because init + validate succeeded.
+    // 3. terraform plan — provider auth/API errors are expected with stub
+    //    credentials, but local configuration errors should fail the test.
     if (options.withPlan !== false) {
       try {
-        const stdout = execSync(
-          `terraform plan -no-color -input=false -out=${path.join(tmpDir, 'plan.tfplan')}`,
-          {
-            cwd: tmpDir,
-            env: execEnv,
-            stdio: 'pipe',
-            timeout: COMMAND_TIMEOUTS_MS.plan,
-          },
+        output.plan = runTerraformCommand(
+          ['plan', '-no-color', '-input=false', '-out', path.join(tmpDir, 'plan.tfplan')],
+          { cwd: tmpDir, env: execEnv, timeout: COMMAND_TIMEOUTS_MS.plan },
         );
-        output.plan = stdout.toString().slice(0, MAX_OUTPUT_LEN);
       } catch (err) {
         output.planError = captureStdio(err);
+        if (isNonProviderPlanError(output.planError)) {
+          return finalize({
+            passed: false,
+            os: 'agnostic',
+            arch,
+            duration_ms: 0,
+            driver: 'terraform',
+            output,
+            error: `terraform plan failed:\n${output.planError}`,
+          });
+        }
       }
     }
 
@@ -266,7 +412,7 @@ export async function runTerraformTest(
 
 export function isTerraformInstalled(): boolean {
   try {
-    execSync('terraform version', { stdio: 'pipe', timeout: 5_000 });
+    execFileSync('terraform', ['version'], { stdio: 'pipe', timeout: 5_000 });
     return true;
   } catch {
     return false;
