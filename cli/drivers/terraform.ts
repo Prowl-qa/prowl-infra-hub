@@ -10,6 +10,41 @@ const COMMAND_TIMEOUTS_MS = {
 };
 
 const MAX_OUTPUT_LEN = 10_000;
+const PROVIDER_AUTH_PLAN_ERROR_PATTERNS: RegExp[] = [
+  /access denied/i,
+  /api token/i,
+  /AccessDenied/i,
+  /AuthFailure/i,
+  /Authentication/i,
+  /Authorization/i,
+  /Forbidden/i,
+  /expiredtoken/i,
+  /InvalidClientTokenId/i,
+  /No valid credential sources/i,
+  /NoCredentialProviders/i,
+  /oauth2/i,
+  /permission denied/i,
+  /security token/i,
+  /Unauthorized/i,
+  /UnauthorizedOperation/i,
+  /client secret/i,
+  /could not find default credentials/i,
+  /credential/i,
+  /failed to refresh cached credentials/i,
+  /subscription/i,
+  /tenant/i,
+];
+const NON_PROVIDER_PLAN_ERROR_PATTERNS: RegExp[] = [
+  /Cycle:/i,
+  /Invalid reference/i,
+  /Invalid resource type/i,
+  /Invalid value for (?:input )?variable/i,
+  /Missing required argument/i,
+  /Module not installed/i,
+  /No value for required variable/i,
+  /Reference to undeclared/i,
+  /Unsupported argument/i,
+];
 
 type TerraformVariableKind = 'string' | 'number' | 'bool' | 'list' | 'map' | 'set' | 'object' | 'tuple';
 
@@ -248,34 +283,23 @@ export function buildStubTfvarsContent(
 }
 
 export function captureStdio(err: unknown): string {
-  const e = err as { stderr?: Buffer; stdout?: Buffer; message?: string };
+  const e = err as { stdout?: Buffer; stderr?: Buffer; message?: string };
   const combined = `${e.stderr?.toString() ?? ''}${e.stdout?.toString() ?? ''}`;
   return (combined || String(e.message ?? err)).slice(0, MAX_OUTPUT_LEN);
 }
 
-const PROVIDER_PLAN_ERROR_PATTERNS = [
-  /access denied/i,
-  /api token/i,
-  /auth(?:entication|orization)?(?: failed| error)?/i,
-  /authfailure/i,
-  /azure cli/i,
-  /client secret/i,
-  /could not find default credentials/i,
-  /could not load the default credentials/i,
-  /credential/i,
-  /expiredtoken/i,
-  /forbidden/i,
-  /invalidclienttokenid/i,
-  /oauth2/i,
-  /permission denied/i,
-  /security token/i,
-  /unauthorized/i,
-];
+export function isNonProviderPlanError(output: string): boolean {
+  const normalized = output.trim();
 
-export function isNonProviderPlanError(planError: string): boolean {
-  const trimmed = planError.trim();
-  if (trimmed === '') return true;
-  return !PROVIDER_PLAN_ERROR_PATTERNS.some((pattern) => pattern.test(trimmed));
+  if (!normalized) {
+    return true;
+  }
+
+  if (NON_PROVIDER_PLAN_ERROR_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return true;
+  }
+
+  return !PROVIDER_AUTH_PLAN_ERROR_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
 function runTerraformCommand(
@@ -373,8 +397,8 @@ export async function runTerraformTest(
       });
     }
 
-    // 3. terraform plan — provider auth/API errors are expected with stub
-    //    credentials, but local configuration errors should fail the test.
+    // 3. terraform plan — best-effort only for provider auth/API failures.
+    //    Local Terraform configuration errors still fail the test.
     if (options.withPlan !== false) {
       try {
         output.plan = runTerraformCommand(
@@ -382,8 +406,10 @@ export async function runTerraformTest(
           { cwd: tmpDir, env: execEnv, timeout: COMMAND_TIMEOUTS_MS.plan },
         );
       } catch (err) {
-        output.planError = captureStdio(err);
-        if (isNonProviderPlanError(output.planError)) {
+        const planError = captureStdio(err);
+        output.planError = planError;
+
+        if (isNonProviderPlanError(planError)) {
           return finalize({
             passed: false,
             os: 'agnostic',
@@ -391,7 +417,7 @@ export async function runTerraformTest(
             duration_ms: 0,
             driver: 'terraform',
             output,
-            error: `terraform plan failed:\n${output.planError}`,
+            error: `terraform plan failed:\n${planError}`,
           });
         }
       }
