@@ -328,14 +328,69 @@ function parseObjectAttributeTypes(body: string): Record<string, TerraformVariab
     }
 
     const expression = body.slice(expressionStart, index).trim();
-    if (expression && !expression.toLowerCase().startsWith('optional(')) {
-      attributes[name] = normalizeTerraformVariableKind(expression);
+    if (expression) {
+      attributes[name] = normalizeTerraformVariableKind(normalizeObjectAttributeTypeExpression(expression));
     }
 
     while (index < body.length && body[index] !== '\n' && body[index] !== ',') index++;
   }
 
   return attributes;
+}
+
+function normalizeObjectAttributeTypeExpression(expression: string): string {
+  const optionalMatch = /^optional\s*\(([\s\S]+)\)$/i.exec(expression.trim());
+  if (!optionalMatch) return expression;
+
+  return firstTopLevelArgument(optionalMatch[1]).trim();
+}
+
+function firstTopLevelArgument(value: string): string {
+  let parenDepth = 0;
+  let braceDepth = 0;
+  let bracketDepth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < value.length; i++) {
+    const char = value[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+    } else if (char === '(') {
+      parenDepth++;
+    } else if (char === ')') {
+      parenDepth--;
+    } else if (char === '{') {
+      braceDepth++;
+    } else if (char === '}') {
+      braceDepth--;
+    } else if (char === '[') {
+      bracketDepth++;
+    } else if (char === ']') {
+      bracketDepth--;
+    } else if (
+      char === ','
+      && parenDepth === 0
+      && braceDepth === 0
+      && bracketDepth === 0
+    ) {
+      return value.slice(0, i);
+    }
+  }
+
+  return value;
 }
 
 export function extractTerraformObjectVariableAttributes(hcl: string): TerraformObjectAttributeTypes {

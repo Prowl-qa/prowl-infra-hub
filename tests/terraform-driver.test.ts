@@ -135,6 +135,7 @@ variable "settings" {
     enabled = bool
     tags = map(string)
     optional_note = optional(string)
+    optional_ids = optional(list(string), [])
   })
 }
 
@@ -159,6 +160,8 @@ variable "implicit_string" {
       retries: 'number',
       enabled: 'bool',
       tags: 'map',
+      optional_note: 'string',
+      optional_ids: 'list',
     },
     inline_settings: {
       owner: 'string',
@@ -197,6 +200,7 @@ test('buildStubTfvarsContent emits map and object typed values', () => {
     owner = string
     retries = number
     enabled = bool
+    optional_note = optional(string)
   })
 }`;
   const tfvars = buildStubTfvarsContent(
@@ -211,6 +215,7 @@ test('buildStubTfvarsContent emits map and object typed values', () => {
   assert.match(tfvars, /^  owner = "prowl-test-owner"$/m);
   assert.match(tfvars, /^  retries = 1$/m);
   assert.match(tfvars, /^  enabled = false$/m);
+  assert.match(tfvars, /^  optional_note = "prowl-test-optional-note"$/m);
 });
 
 test('renderTerraformTemplatePlaceholders replaces quoted and unquoted HCL placeholders', () => {

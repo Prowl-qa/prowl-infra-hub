@@ -167,10 +167,36 @@ async function runTerraformPlanModeTest(
   playbookPath: string,
   outputDir: string,
   updateYaml: boolean,
+  requireTerraform = false,
 ): Promise<TestOutcome> {
   if (!isTerraformInstalled()) {
-    console.log(`  Skipped — terraform CLI not on PATH (install via 'brew install terraform' or equivalent)`);
-    return 'skipped';
+    const error = `terraform CLI not on PATH (install via 'brew install terraform' or equivalent)`;
+    if (!requireTerraform) {
+      console.log(`  Skipped — ${error}`);
+      return 'skipped';
+    }
+
+    const report: TestReport = {
+      playbook: playbookPath,
+      tool: 'terraform',
+      testedOn: {
+        os: 'agnostic',
+        arch: process.arch === 'arm64' ? 'arm64' : 'x86_64',
+      },
+      passed: false,
+      date: new Date().toISOString(),
+      duration_ms: 0,
+      driver: 'terraform',
+      testMode: 'plan',
+      terraform: {},
+      error,
+    };
+
+    const reportPath = await writeReport(report, outputDir);
+    console.log(`  Result: FAILED (0ms)`);
+    console.log(`  Report: ${reportPath}`);
+    console.log(`  Error: ${error}`);
+    return 'failed';
   }
 
   const result = await runTerraformTest({ playbookPath });
@@ -212,7 +238,8 @@ async function testPlaybookDocker(
   playbookPath: string,
   os: string | undefined,
   outputDir: string,
-  updateYaml: boolean
+  updateYaml: boolean,
+  requireTerraform: boolean,
 ): Promise<TestOutcome> {
   const content = await fs.readFile(playbookPath, 'utf8');
   const tool = detectTool(content);
@@ -225,7 +252,7 @@ async function testPlaybookDocker(
   console.log(`  Target: ${os || `auto (${osFamily})`}`);
 
   if (tool === 'terraform') {
-    return runTerraformPlanModeTest(playbookPath, outputDir, updateYaml);
+    return runTerraformPlanModeTest(playbookPath, outputDir, updateYaml, requireTerraform);
   }
 
   if (tool !== 'ansible') {
@@ -269,6 +296,7 @@ async function testPlaybookEc2(
   ec2Config: Ec2Config | undefined,
   outputDir: string,
   updateYaml: boolean,
+  requireTerraform: boolean,
   instanceType?: string,
   maxPrice?: string
 ): Promise<TestOutcome> {
@@ -286,7 +314,7 @@ async function testPlaybookEc2(
     // doesn't add anything over the local plan-mode test. Run it locally
     // and emit the same report shape.
     console.log(`  Note: terraform playbooks run in plan-mode (init + validate + plan) regardless of --driver.`);
-    return runTerraformPlanModeTest(playbookPath, outputDir, updateYaml);
+    return runTerraformPlanModeTest(playbookPath, outputDir, updateYaml, requireTerraform);
   }
 
   if (tool !== 'ansible') {
@@ -478,7 +506,7 @@ async function main(): Promise<void> {
       }
 
       if (driver === 'docker') {
-        recordOutcome(await testPlaybookDocker(playbookPath, targetOs, outputDir, updateYaml));
+        recordOutcome(await testPlaybookDocker(playbookPath, targetOs, outputDir, updateYaml, !testAll));
       } else {
         if (tool === 'ansible' && !ec2Config) {
           ec2Config = await resolveEc2Config();
@@ -487,7 +515,7 @@ async function main(): Promise<void> {
         // EC2: run against each environment profile
         for (const env of envProfiles) {
           recordOutcome(await testPlaybookEc2(
-            playbookPath, env, ec2Config, outputDir, updateYaml, instanceType, maxPrice
+            playbookPath, env, ec2Config, outputDir, updateYaml, !testAll, instanceType, maxPrice
           ));
         }
       }
