@@ -7,7 +7,7 @@ variable "aws_region" {
 variable "github_org" {
   description = "GitHub organization name"
   type        = string
-  default     = "Prowl-qa"
+  default     = "prowl-tools"
 }
 
 variable "github_repo" {

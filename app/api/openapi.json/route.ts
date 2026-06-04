@@ -8,7 +8,7 @@ const spec = {
     version: '1.0.0',
   },
   servers: [
-    { url: 'https://infra.prowlqa.dev', description: 'Production' },
+    { url: 'https://infra.prowl.tools', description: 'Production' },
     { url: 'http://localhost:3004', description: 'Local development' },
   ],
   paths: {
