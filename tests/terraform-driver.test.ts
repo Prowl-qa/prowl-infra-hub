@@ -279,6 +279,14 @@ test('isNonProviderPlanError tolerates provider authentication failures', () => 
     isNonProviderPlanError('Error: No valid credential sources found for AWS Provider'),
     false,
   );
+  assert.equal(
+    isNonProviderPlanError('Error: could not find default credentials for Google Provider'),
+    false,
+  );
+  assert.equal(
+    isNonProviderPlanError('Error: failed to refresh cached credentials'),
+    false,
+  );
 });
 
 test('isNonProviderPlanError fails missing required Terraform variables', () => {
@@ -286,4 +294,15 @@ test('isNonProviderPlanError fails missing required Terraform variables', () => 
     isNonProviderPlanError('Error: No value for required variable\nThe root input variable "region" is not set.'),
     true,
   );
+});
+
+test('isNonProviderPlanError fails local credential file errors', () => {
+  const output = `Error: Invalid function argument
+
+  on main.tf line 3, in provider "google":
+   3:   credentials = file("credentials.json")
+
+Invalid value for "path" parameter: no file exists at "credentials.json"; this function works only with files that are distributed as part of the configuration source code.`;
+
+  assert.equal(isNonProviderPlanError(output), true);
 });

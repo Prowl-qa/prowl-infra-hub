@@ -29,7 +29,6 @@ const PROVIDER_AUTH_PLAN_ERROR_PATTERNS: RegExp[] = [
   /UnauthorizedOperation/i,
   /client secret/i,
   /could not find default credentials/i,
-  /credential/i,
   /failed to refresh cached credentials/i,
   /subscription/i,
   /tenant/i,
