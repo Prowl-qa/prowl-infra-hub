@@ -1,6 +1,6 @@
 # Prowl Infra Hub - Product Backlog
 
-**Repo**: `Prowl-qa/prowl-infra-hub`
+**Repo**: `prowl-tools/prowl-infra-hub`
 **Local path**: `~/Desktop/Current Projects/Prowl QA/Repositories/prowl-infra-hub`
 **Main branch**: `main`
 **Stack**: Next.js + YAML playbook templates + PostgreSQL + Drizzle ORM + GitHub Actions CI

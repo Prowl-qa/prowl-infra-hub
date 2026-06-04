@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from 'react';
 
-const GITHUB_NEW_FILE_URL = 'https://github.com/Prowl-qa/prowl-infra-hub/new/main';
+const GITHUB_NEW_FILE_URL = 'https://github.com/prowl-tools/prowl-infra-hub/new/main';
 
 type SubmitState = {
   kind: 'success' | 'error';

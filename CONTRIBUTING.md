@@ -81,7 +81,7 @@ playbook: |
 
 ### Via the Web UI
 
-1. Go to the [Prowl Infra Hub](https://infra.prowlqa.dev)
+1. Go to the [Prowl Infra Hub](https://infra.prowl.tools)
 2. Click "Submit through PR" and fill out the form
 3. This opens GitHub with a prefilled file — commit it on a branch
 4. Create a pull request targeting `main`
