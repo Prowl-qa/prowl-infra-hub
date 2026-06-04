@@ -190,6 +190,10 @@ function encodeTfvarsString(value: string): string {
     .replace(/%\{/g, '%%{');
 }
 
+function encodeHclStringFragment(value: string): string {
+  return encodeTfvarsString(value).slice(1, -1);
+}
+
 function splitTfvarsListValue(value: string): string[] {
   const trimmed = value.trim();
   if (trimmed.startsWith('[')) {
@@ -237,6 +241,33 @@ function defaultStubValueForVariable(name: string): string {
   return NAMED_STUB_VALUES[name] ?? `prowl-test-${name.replace(/_/g, '-')}`;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isInsideDoubleQuotedString(source: string, offset: number): boolean {
+  const lineStart = source.lastIndexOf('\n', offset - 1) + 1;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = lineStart; i < offset; i++) {
+    const char = source[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+    }
+  }
+
+  return inString;
+}
+
 function encodeTypedTfvarsValue(
   name: string,
   value: string,
@@ -280,6 +311,29 @@ export function buildStubTfvarsContent(
     lines.push(`${name} = ${encodeTypedTfvarsValue(name, value, variableTypes[name])}`);
   }
   return lines.join('\n') + '\n';
+}
+
+export function renderTerraformTemplatePlaceholders(
+  hcl: string,
+  declaredVars: string[],
+  overrides: Record<string, string> = {},
+  variableTypes: Record<string, TerraformVariableKind> = {},
+): string {
+  let rendered = hcl;
+
+  for (const name of declaredVars) {
+    const placeholderName = name.toUpperCase();
+    const pattern = new RegExp(`\\{\\{\\s*${escapeRegExp(placeholderName)}\\s*\\}\\}`, 'gi');
+    const value = overrides[name] ?? defaultStubValueForVariable(name);
+    const typedValue = encodeTypedTfvarsValue(name, value, variableTypes[name]);
+    const stringFragment = encodeHclStringFragment(value);
+
+    rendered = rendered.replace(pattern, (_match: string, offset: number, source: string) => (
+      isInsideDoubleQuotedString(source, offset) ? stringFragment : typedValue
+    ));
+  }
+
+  return rendered;
 }
 
 export function captureStdio(err: unknown): string {
@@ -347,13 +401,17 @@ export async function runTerraformTest(
       });
     }
 
-    // Write the HCL as main.tf
     const hcl = stripYamlSeparator(dedentBlock(block));
-    await fs.writeFile(path.join(tmpDir, 'main.tf'), hcl);
-
-    // Write stub tfvars so `plan` doesn't fail purely on missing variable values
     const declaredVars = extractDeclaredVarNames(content);
     const variableTypes = extractTerraformVariableTypes(hcl);
+
+    // Write the HCL as main.tf after rendering catalog template placeholders.
+    await fs.writeFile(
+      path.join(tmpDir, 'main.tf'),
+      renderTerraformTemplatePlaceholders(hcl, declaredVars, options.varOverrides, variableTypes),
+    );
+
+    // Write stub tfvars so `plan` doesn't fail purely on missing variable values.
     await fs.writeFile(
       path.join(tmpDir, 'terraform.tfvars'),
       buildStubTfvarsContent(declaredVars, options.varOverrides, variableTypes),

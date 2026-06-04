@@ -8,6 +8,7 @@ import {
   extractTerraformBlock,
   extractTerraformVariableTypes,
   isNonProviderPlanError,
+  renderTerraformTemplatePlaceholders,
 } from '../cli/drivers/terraform.ts';
 
 test('extractTerraformBlock returns the HCL body of a playbook: | YAML field', () => {
@@ -117,6 +118,33 @@ variable "project_name" {
   });
 });
 
+test('extractTerraformVariableTypes detects complex types and ignores untyped variables', () => {
+  const hcl = `variable "labels" {
+  type = map(string)
+}
+
+variable "allowed_subnets" {
+  type = set(string)
+}
+
+variable "settings" {
+  type = object({
+    owner = string
+  })
+}
+
+variable "implicit_string" {
+  description = "No type declared"
+}
+`;
+
+  assert.deepEqual(extractTerraformVariableTypes(hcl), {
+    labels: 'map',
+    allowed_subnets: 'set',
+    settings: 'object',
+  });
+});
+
 test('buildStubTfvarsContent emits typed values and escapes HCL template markers', () => {
   const tfvars = buildStubTfvarsContent(
     ['aws_region', 'volume_ids', 'subnet_ids', 'cpu_threshold', 'feature_enabled', 'project_name'],
@@ -142,6 +170,46 @@ test('buildStubTfvarsContent emits typed values and escapes HCL template markers
   assert.match(tfvars, /^project_name = "app-\$\$\{env\}-%%\{literal\}"$/m);
 });
 
+test('buildStubTfvarsContent emits map and object typed values', () => {
+  const tfvars = buildStubTfvarsContent(
+    ['labels', 'settings'],
+    { labels: 'owner-${env}' },
+    { labels: 'map', settings: 'object' },
+  );
+
+  assert.match(tfvars, /^labels = \{ stub = "owner-\$\$\{env\}" \}$/m);
+  assert.match(tfvars, /^settings = \{\}$/m);
+});
+
+test('renderTerraformTemplatePlaceholders replaces quoted and unquoted HCL placeholders', () => {
+  const hcl = `provider "aws" {
+  region = "{{AWS_REGION}}"
+}
+
+variable "cpu_threshold" {
+  type    = number
+  default = {{CPU_THRESHOLD}}
+}
+
+variable "project_name" {
+  type    = string
+  default = "{{PROJECT_NAME}}"
+}
+`;
+  const declaredVars = ['aws_region', 'cpu_threshold', 'project_name'];
+  const rendered = renderTerraformTemplatePlaceholders(
+    hcl,
+    declaredVars,
+    { project_name: 'app-${env}' },
+    extractTerraformVariableTypes(hcl),
+  );
+
+  assert.match(rendered, /region = "us-east-1"/);
+  assert.match(rendered, /default = 1/);
+  assert.match(rendered, /default = "app-\$\$\{env\}"/);
+  assert.equal(rendered.includes('{{'), false);
+});
+
 test('captureStdio falls back to the error message when stdio buffers are empty', () => {
   const output = captureStdio({
     stdout: Buffer.alloc(0),
@@ -150,6 +218,16 @@ test('captureStdio falls back to the error message when stdio buffers are empty'
   });
 
   assert.equal(output, 'Command failed with exit code 3');
+});
+
+test('captureStdio combines stderr before stdout and ignores message when output exists', () => {
+  const output = captureStdio({
+    stdout: Buffer.from('stdout text'),
+    stderr: Buffer.from('stderr text\n'),
+    message: 'Command failed with exit code 3',
+  });
+
+  assert.equal(output, 'stderr text\nstdout text');
 });
 
 test('isNonProviderPlanError distinguishes provider auth from catalog defects', () => {
