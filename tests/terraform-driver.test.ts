@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { extractTerraformBlock, extractDeclaredVarNames } from '../cli/drivers/terraform.ts';
+import {
+  buildStubTfvarsContent,
+  captureStdio,
+  extractDeclaredVarNames,
+  extractTerraformBlock,
+  extractTerraformVariableTypes,
+  isNonProviderPlanError,
+} from '../cli/drivers/terraform.ts';
 
 test('extractTerraformBlock returns the HCL body of a playbook: | YAML field', () => {
   const yaml = `name: foo
@@ -82,4 +89,72 @@ playbook: |
 `;
   const names = extractDeclaredVarNames(yaml);
   assert.deepEqual(names, ['aws_region', 'project_name']);
+});
+
+test('extractTerraformVariableTypes detects simple Terraform variable type constraints', () => {
+  const hcl = `variable "subnet_ids" {
+  type = list(string)
+}
+
+variable "cpu_threshold" {
+  type = number
+}
+
+variable "feature_enabled" {
+  type = bool
+}
+
+variable "project_name" {
+  type = string
+}
+`;
+
+  assert.deepEqual(extractTerraformVariableTypes(hcl), {
+    subnet_ids: 'list',
+    cpu_threshold: 'number',
+    feature_enabled: 'bool',
+    project_name: 'string',
+  });
+});
+
+test('buildStubTfvarsContent emits typed values and escapes HCL template markers', () => {
+  const tfvars = buildStubTfvarsContent(
+    ['aws_region', 'volume_ids', 'subnet_ids', 'cpu_threshold', 'feature_enabled', 'project_name'],
+    {
+      subnet_ids: 'subnet-1, subnet-2',
+      project_name: 'app-${env}-%{literal}',
+    },
+    {
+      aws_region: 'string',
+      volume_ids: 'list',
+      subnet_ids: 'list',
+      cpu_threshold: 'number',
+      feature_enabled: 'bool',
+      project_name: 'string',
+    },
+  );
+
+  assert.match(tfvars, /^aws_region = "us-east-1"$/m);
+  assert.match(tfvars, /^volume_ids = \["vol-00000000000000000"\]$/m);
+  assert.match(tfvars, /^subnet_ids = \["subnet-1", "subnet-2"\]$/m);
+  assert.match(tfvars, /^cpu_threshold = 1$/m);
+  assert.match(tfvars, /^feature_enabled = false$/m);
+  assert.match(tfvars, /^project_name = "app-\$\$\{env\}-%%\{literal\}"$/m);
+});
+
+test('captureStdio falls back to the error message when stdio buffers are empty', () => {
+  const output = captureStdio({
+    stdout: Buffer.alloc(0),
+    stderr: Buffer.alloc(0),
+    message: 'Command failed with exit code 3',
+  });
+
+  assert.equal(output, 'Command failed with exit code 3');
+});
+
+test('isNonProviderPlanError distinguishes provider auth from catalog defects', () => {
+  assert.equal(isNonProviderPlanError('Error: No value for required variable'), true);
+  assert.equal(isNonProviderPlanError('Error: Cycle: google_project.main, provider["registry.terraform.io/hashicorp/google"]'), true);
+  assert.equal(isNonProviderPlanError('Error: No valid credential sources found'), false);
+  assert.equal(isNonProviderPlanError('Error: Cloudflare API token is required'), false);
 });

@@ -10,6 +10,11 @@ import { updatePlaybookYamlContent } from './playbook-metadata';
 import { writeReport, type TestReport } from './reporters/json';
 
 const REPORT_DIR = '.prowl-test-reports';
+type TestOutcome = 'passed' | 'failed' | 'skipped';
+
+function outcomeFromPassed(passed: boolean): TestOutcome {
+  return passed ? 'passed' : 'failed';
+}
 
 function usage(): void {
   console.log(`
@@ -149,10 +154,10 @@ async function runTerraformPlanModeTest(
   playbookPath: string,
   outputDir: string,
   updateYaml: boolean,
-): Promise<boolean> {
+): Promise<TestOutcome> {
   if (!isTerraformInstalled()) {
     console.log(`  Skipped — terraform CLI not on PATH (install via 'brew install terraform' or equivalent)`);
-    return true;
+    return 'skipped';
   }
 
   const result = await runTerraformTest({ playbookPath });
@@ -175,7 +180,7 @@ async function runTerraformPlanModeTest(
   console.log(`  Report: ${reportPath}`);
 
   if (result.passed && result.output.planError) {
-    console.log(`  Note: validate passed but plan errored (likely provider auth / variable type)`);
+    console.log(`  Note: validate passed but plan stopped at provider auth/API boundary`);
   }
 
   if (result.error) {
@@ -187,7 +192,7 @@ async function runTerraformPlanModeTest(
     console.log(`  Updated: ${playbookPath} with test metadata`);
   }
 
-  return result.passed;
+  return outcomeFromPassed(result.passed);
 }
 
 async function testPlaybookDocker(
@@ -195,7 +200,7 @@ async function testPlaybookDocker(
   os: string | undefined,
   outputDir: string,
   updateYaml: boolean
-): Promise<boolean> {
+): Promise<TestOutcome> {
   const content = await fs.readFile(playbookPath, 'utf8');
   const tool = detectTool(content);
   const osFamily = detectOsFamily(content);
@@ -212,7 +217,7 @@ async function testPlaybookDocker(
 
   if (tool !== 'ansible') {
     console.log(`  Skipped — ${tool} driver not yet implemented (Ansible-only MVP)`);
-    return true;
+    return 'skipped';
   }
 
   const result = await runAnsibleTest({ playbookPath, os, osFamily });
@@ -242,18 +247,18 @@ async function testPlaybookDocker(
     console.log(`  Updated: ${playbookPath} with test metadata`);
   }
 
-  return result.passed;
+  return outcomeFromPassed(result.passed);
 }
 
 async function testPlaybookEc2(
   playbookPath: string,
   envProfile: string,
-  ec2Config: Ec2Config,
+  ec2Config: Ec2Config | undefined,
   outputDir: string,
   updateYaml: boolean,
   instanceType?: string,
   maxPrice?: string
-): Promise<boolean> {
+): Promise<TestOutcome> {
   const content = await fs.readFile(playbookPath, 'utf8');
   const tool = detectTool(content);
   const profile = getEnvironmentProfile(envProfile);
@@ -273,7 +278,11 @@ async function testPlaybookEc2(
 
   if (tool !== 'ansible') {
     console.log(`  Skipped — ${tool} driver not yet implemented (Ansible-only MVP)`);
-    return true;
+    return 'skipped';
+  }
+
+  if (!ec2Config) {
+    throw new Error('EC2 config must be resolved before running Ansible EC2 tests');
   }
 
   const result = await runEc2AnsibleTest({
@@ -319,7 +328,7 @@ async function testPlaybookEc2(
     console.log(`  Updated: ${playbookPath} with test metadata`);
   }
 
-  return result.passed;
+  return outcomeFromPassed(result.passed);
 }
 
 // ---------------------------------------------------------------------------
@@ -420,10 +429,11 @@ async function main(): Promise<void> {
   let failed = 0;
   let skipped = 0;
 
-  // Resolve EC2 config once if needed
   let ec2Config: Ec2Config | undefined;
-  if (driver === 'ec2') {
-    ec2Config = await resolveEc2Config();
+  const recordOutcome = (outcome: TestOutcome): void => {
+    if (outcome === 'passed') passed++;
+    else if (outcome === 'failed') failed++;
+    else skipped++;
   }
 
   try {
@@ -445,17 +455,17 @@ async function main(): Promise<void> {
       }
 
       if (driver === 'docker') {
-        const ok = await testPlaybookDocker(playbookPath, targetOs, outputDir, updateYaml);
-        if (ok) passed++;
-        else failed++;
+        recordOutcome(await testPlaybookDocker(playbookPath, targetOs, outputDir, updateYaml));
       } else {
+        if (tool === 'ansible' && !ec2Config) {
+          ec2Config = await resolveEc2Config();
+        }
+
         // EC2: run against each environment profile
         for (const env of envProfiles) {
-          const ok = await testPlaybookEc2(
-            playbookPath, env, ec2Config!, outputDir, updateYaml, instanceType, maxPrice
-          );
-          if (ok) passed++;
-          else failed++;
+          recordOutcome(await testPlaybookEc2(
+            playbookPath, env, ec2Config, outputDir, updateYaml, instanceType, maxPrice
+          ));
         }
       }
     }
