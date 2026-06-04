@@ -5,10 +5,16 @@ import path from 'node:path';
 
 import { runAnsibleTest, getSupportedPlatforms } from './drivers/ansible';
 import { runEc2AnsibleTest, getSupportedEnvironments, getEnvironmentProfile } from './drivers/ansible-ec2';
+import { runTerraformTest, isTerraformInstalled } from './drivers/terraform';
 import { updatePlaybookYamlContent } from './playbook-metadata';
 import { writeReport, type TestReport } from './reporters/json';
 
 const REPORT_DIR = '.prowl-test-reports';
+type TestOutcome = 'passed' | 'failed' | 'skipped';
+
+function outcomeFromPassed(passed: boolean): TestOutcome {
+  return passed ? 'passed' : 'failed';
+}
 
 function usage(): void {
   console.log(`
@@ -70,6 +76,19 @@ async function findAllPlaybooks(): Promise<string[]> {
 function detectTool(content: string): string {
   const match = content.match(/^tool:\s*(.+)$/m);
   return match ? match[1].trim().toLowerCase() : 'unknown';
+}
+
+async function filterPlaybooksByTool(playbookPaths: string[], expectedTool: string): Promise<string[]> {
+  const filtered: string[] = [];
+
+  for (const playbookPath of playbookPaths) {
+    const content = await fs.readFile(playbookPath, 'utf8');
+    if (detectTool(content) === expectedTool) {
+      filtered.push(playbookPath);
+    }
+  }
+
+  return filtered;
 }
 
 function detectOsFamily(content: string): string {
@@ -144,12 +163,84 @@ async function resolveEc2Config(): Promise<Ec2Config> {
 // Test runners
 // ---------------------------------------------------------------------------
 
+async function runTerraformPlanModeTest(
+  playbookPath: string,
+  outputDir: string,
+  updateYaml: boolean,
+  requireTerraform = false,
+): Promise<TestOutcome> {
+  if (!isTerraformInstalled()) {
+    const error = `terraform CLI not on PATH (install via 'brew install terraform' or equivalent)`;
+    if (!requireTerraform) {
+      console.log(`  Skipped — ${error}`);
+      return 'skipped';
+    }
+
+    const report: TestReport = {
+      playbook: playbookPath,
+      tool: 'terraform',
+      testedOn: {
+        os: 'agnostic',
+        arch: process.arch === 'arm64' ? 'arm64' : 'x86_64',
+      },
+      passed: false,
+      date: new Date().toISOString(),
+      duration_ms: 0,
+      driver: 'terraform',
+      testMode: 'plan',
+      terraform: {},
+      error,
+    };
+
+    const reportPath = await writeReport(report, outputDir);
+    console.log(`  Result: FAILED (0ms)`);
+    console.log(`  Report: ${reportPath}`);
+    console.log(`  Error: ${error}`);
+    return 'failed';
+  }
+
+  const result = await runTerraformTest({ playbookPath });
+
+  const report: TestReport = {
+    playbook: playbookPath,
+    tool: 'terraform',
+    testedOn: { os: result.os, arch: result.arch },
+    passed: result.passed,
+    date: new Date().toISOString(),
+    duration_ms: result.duration_ms,
+    driver: 'terraform',
+    testMode: 'plan',
+    terraform: result.output,
+    ...(result.error ? { error: result.error } : {}),
+  };
+
+  const reportPath = await writeReport(report, outputDir);
+  console.log(`  Result: ${result.passed ? 'PASSED' : 'FAILED'} (${result.duration_ms}ms)`);
+  console.log(`  Report: ${reportPath}`);
+
+  if (result.passed && result.output.planError) {
+    console.log(`  Note: validate passed but plan stopped at provider auth/API boundary`);
+  }
+
+  if (result.error) {
+    console.log(`  Error: ${result.error.slice(0, 200)}`);
+  }
+
+  if (result.passed && updateYaml) {
+    await updatePlaybookYaml(playbookPath, result.os, result.arch);
+    console.log(`  Updated: ${playbookPath} with test metadata`);
+  }
+
+  return outcomeFromPassed(result.passed);
+}
+
 async function testPlaybookDocker(
   playbookPath: string,
   os: string | undefined,
   outputDir: string,
-  updateYaml: boolean
-): Promise<boolean> {
+  updateYaml: boolean,
+  requireTerraform: boolean,
+): Promise<TestOutcome> {
   const content = await fs.readFile(playbookPath, 'utf8');
   const tool = detectTool(content);
   const osFamily = detectOsFamily(content);
@@ -160,9 +251,13 @@ async function testPlaybookDocker(
   console.log(`  OS family: ${osFamily}`);
   console.log(`  Target: ${os || `auto (${osFamily})`}`);
 
+  if (tool === 'terraform') {
+    return runTerraformPlanModeTest(playbookPath, outputDir, updateYaml, requireTerraform);
+  }
+
   if (tool !== 'ansible') {
     console.log(`  Skipped — ${tool} driver not yet implemented (Ansible-only MVP)`);
-    return true;
+    return 'skipped';
   }
 
   const result = await runAnsibleTest({ playbookPath, os, osFamily });
@@ -192,18 +287,19 @@ async function testPlaybookDocker(
     console.log(`  Updated: ${playbookPath} with test metadata`);
   }
 
-  return result.passed;
+  return outcomeFromPassed(result.passed);
 }
 
 async function testPlaybookEc2(
   playbookPath: string,
   envProfile: string,
-  ec2Config: Ec2Config,
+  ec2Config: Ec2Config | undefined,
   outputDir: string,
   updateYaml: boolean,
+  requireTerraform: boolean,
   instanceType?: string,
   maxPrice?: string
-): Promise<boolean> {
+): Promise<TestOutcome> {
   const content = await fs.readFile(playbookPath, 'utf8');
   const tool = detectTool(content);
   const profile = getEnvironmentProfile(envProfile);
@@ -213,9 +309,21 @@ async function testPlaybookEc2(
   console.log(`  Tool: ${tool}`);
   console.log(`  Environment: ${profile?.label || envProfile}`);
 
+  if (tool === 'terraform') {
+    // Terraform plan-mode doesn't deploy real resources, so the EC2 driver
+    // doesn't add anything over the local plan-mode test. Run it locally
+    // and emit the same report shape.
+    console.log(`  Note: terraform playbooks run in plan-mode (init + validate + plan) regardless of --driver.`);
+    return runTerraformPlanModeTest(playbookPath, outputDir, updateYaml, requireTerraform);
+  }
+
   if (tool !== 'ansible') {
     console.log(`  Skipped — ${tool} driver not yet implemented (Ansible-only MVP)`);
-    return true;
+    return 'skipped';
+  }
+
+  if (!ec2Config) {
+    throw new Error('EC2 config must be resolved before running Ansible EC2 tests');
   }
 
   const result = await runEc2AnsibleTest({
@@ -261,7 +369,7 @@ async function testPlaybookEc2(
     console.log(`  Updated: ${playbookPath} with test metadata`);
   }
 
-  return result.passed;
+  return outcomeFromPassed(result.passed);
 }
 
 // ---------------------------------------------------------------------------
@@ -340,7 +448,14 @@ async function main(): Promise<void> {
     }
   }
 
-  const playbooks = testAll ? await findAllPlaybooks() : playbookPaths;
+  let playbooks = testAll ? await findAllPlaybooks() : playbookPaths;
+  let excludedFromEc2All = 0;
+
+  if (testAll && driver === 'ec2') {
+    const ansiblePlaybooks = await filterPlaybooksByTool(playbooks, 'ansible');
+    excludedFromEc2All = playbooks.length - ansiblePlaybooks.length;
+    playbooks = ansiblePlaybooks;
+  }
 
   if (playbooks.length === 0) {
     console.error('Error: No playbook files specified. Use --all or provide paths.');
@@ -356,17 +471,21 @@ async function main(): Promise<void> {
   console.log(`  Driver: ${driver}`);
   if (driver === 'ec2') {
     console.log(`  Environments: ${envProfiles.join(', ')}`);
+    if (testAll && excludedFromEc2All > 0) {
+      console.log(`  Scope: ansible-only --all sweep (${excludedFromEc2All} non-Ansible playbook(s) excluded)`);
+    }
   }
 
   let passed = 0;
   let failed = 0;
   let skipped = 0;
 
-  // Resolve EC2 config once if needed
   let ec2Config: Ec2Config | undefined;
-  if (driver === 'ec2') {
-    ec2Config = await resolveEc2Config();
-  }
+  const recordOutcome = (outcome: TestOutcome): void => {
+    if (outcome === 'passed') passed++;
+    else if (outcome === 'failed') failed++;
+    else skipped++;
+  };
 
   try {
     for (const playbookPath of playbooks) {
@@ -380,24 +499,24 @@ async function main(): Promise<void> {
 
       const content = await fs.readFile(playbookPath, 'utf8');
       const tool = detectTool(content);
-      if (tool !== 'ansible') {
+      if (tool !== 'ansible' && tool !== 'terraform') {
         skipped++;
-        console.log(`\nSkipping: ${playbookPath} (${tool} — not supported in MVP)`);
+        console.log(`\nSkipping: ${playbookPath} (${tool} — driver not yet implemented)`);
         continue;
       }
 
       if (driver === 'docker') {
-        const ok = await testPlaybookDocker(playbookPath, targetOs, outputDir, updateYaml);
-        if (ok) passed++;
-        else failed++;
+        recordOutcome(await testPlaybookDocker(playbookPath, targetOs, outputDir, updateYaml, !testAll));
       } else {
+        if (tool === 'ansible' && !ec2Config) {
+          ec2Config = await resolveEc2Config();
+        }
+
         // EC2: run against each environment profile
         for (const env of envProfiles) {
-          const ok = await testPlaybookEc2(
-            playbookPath, env, ec2Config!, outputDir, updateYaml, instanceType, maxPrice
-          );
-          if (ok) passed++;
-          else failed++;
+          recordOutcome(await testPlaybookEc2(
+            playbookPath, env, ec2Config, outputDir, updateYaml, !testAll, instanceType, maxPrice
+          ));
         }
       }
     }

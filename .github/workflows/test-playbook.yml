@@ -44,6 +44,11 @@ jobs:
       - name: Install Molecule and Docker driver
         run: pip install molecule molecule-plugins[docker]
 
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
       - name: Detect changed playbooks
         id: changed
         run: |
