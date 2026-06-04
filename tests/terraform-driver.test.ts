@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { extractTerraformBlock, extractDeclaredVarNames } from '../cli/drivers/terraform.ts';
+import {
+  extractDeclaredVarNames,
+  extractTerraformBlock,
+  isNonProviderPlanError,
+} from '../cli/drivers/terraform.ts';
 
 test('extractTerraformBlock returns the HCL body of a playbook: | YAML field', () => {
   const yaml = `name: foo
@@ -82,4 +86,19 @@ playbook: |
 `;
   const names = extractDeclaredVarNames(yaml);
   assert.deepEqual(names, ['aws_region', 'project_name']);
+});
+
+
+test('isNonProviderPlanError tolerates provider authentication failures', () => {
+  assert.equal(
+    isNonProviderPlanError('Error: No valid credential sources found for AWS Provider'),
+    false,
+  );
+});
+
+test('isNonProviderPlanError fails missing required Terraform variables', () => {
+  assert.equal(
+    isNonProviderPlanError('Error: No value for required variable\nThe root input variable "region" is not set.'),
+    true,
+  );
 });
