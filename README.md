@@ -2,7 +2,7 @@
 
 A curated, community-contributed registry of verified infrastructure automation templates. Browse, search, and download playbooks for common infrastructure patterns — from server provisioning to security hardening to monitoring setup.
 
-Part of the [ProwlAI](https://prowlqa.dev) family, alongside [Prowl QA](https://github.com/Prowl-qa/prowl) and [Prowl QA Hub](https://hub.prowlqa.dev).
+Part of the [Prowl](https://prowl.tools) suite, alongside the [Prowl CLI](https://github.com/prowl-tools/prowl) and [Prowl Hub](https://hub.prowl.tools).
 
 ## Core Principles
 
@@ -32,12 +32,12 @@ This repo also publishes a standalone CLI for testing playbooks. Install it
 globally to run `prowl-infra test ...` from anywhere:
 
 ```bash
-npm install -g @prowlqa/infra-cli
+npm install -g prowl-infra
 prowl-infra test path/to/playbook.yml
 ```
 
 The CLI source lives in [`cli/`](cli) and is published as
-[`@prowlqa/infra-cli`](https://www.npmjs.com/package/@prowlqa/infra-cli).
+[`prowl-infra`](https://www.npmjs.com/package/prowl-infra).
 See [`cli/README.md`](cli/README.md) for usage details and
 [`docs/ec2-testing.md`](docs/ec2-testing.md) for the EC2 driver walkthrough.
 

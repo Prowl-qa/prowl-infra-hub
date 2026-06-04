@@ -11,8 +11,8 @@ function makeRequest(
     headers: new Headers(headerEntries),
     method: 'GET',
     nextUrl: {
-      host: 'infra.prowlqa.dev',
-      hostname: 'infra.prowlqa.dev',
+      host: 'infra.prowl.tools',
+      hostname: 'infra.prowl.tools',
       pathname: '/api/playbooks/search',
     },
     ...overrides,
