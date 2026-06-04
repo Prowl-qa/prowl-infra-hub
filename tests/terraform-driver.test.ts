@@ -6,6 +6,7 @@ import {
   captureStdio,
   extractDeclaredVarNames,
   extractTerraformBlock,
+  extractTerraformObjectVariableAttributes,
   extractTerraformVariableTypes,
   isNonProviderPlanError,
   renderTerraformTemplatePlaceholders,
@@ -130,7 +131,15 @@ variable "allowed_subnets" {
 variable "settings" {
   type = object({
     owner = string
+    retries = number
+    enabled = bool
+    tags = map(string)
+    optional_note = optional(string)
   })
+}
+
+variable "inline_settings" {
+  type = object({ owner = string })
 }
 
 variable "implicit_string" {
@@ -142,6 +151,18 @@ variable "implicit_string" {
     labels: 'map',
     allowed_subnets: 'set',
     settings: 'object',
+    inline_settings: 'object',
+  });
+  assert.deepEqual(extractTerraformObjectVariableAttributes(hcl), {
+    settings: {
+      owner: 'string',
+      retries: 'number',
+      enabled: 'bool',
+      tags: 'map',
+    },
+    inline_settings: {
+      owner: 'string',
+    },
   });
 });
 
@@ -171,14 +192,25 @@ test('buildStubTfvarsContent emits typed values and escapes HCL template markers
 });
 
 test('buildStubTfvarsContent emits map and object typed values', () => {
+  const hcl = `variable "settings" {
+  type = object({
+    owner = string
+    retries = number
+    enabled = bool
+  })
+}`;
   const tfvars = buildStubTfvarsContent(
     ['labels', 'settings'],
     { labels: 'owner-${env}' },
     { labels: 'map', settings: 'object' },
+    extractTerraformObjectVariableAttributes(hcl),
   );
 
   assert.match(tfvars, /^labels = \{ stub = "owner-\$\$\{env\}" \}$/m);
-  assert.match(tfvars, /^settings = \{\}$/m);
+  assert.match(tfvars, /^settings = \{$/m);
+  assert.match(tfvars, /^  owner = "prowl-test-owner"$/m);
+  assert.match(tfvars, /^  retries = 1$/m);
+  assert.match(tfvars, /^  enabled = false$/m);
 });
 
 test('renderTerraformTemplatePlaceholders replaces quoted and unquoted HCL placeholders', () => {
