@@ -93,6 +93,11 @@ jobs:
             'botocore==1.34.131'
           ansible-galaxy collection install 'amazon.aws:==7.5.0' 'community.aws:==7.2.0'
 
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
       - name: Write SSH key
         run: |
           echo "$EC2_SSH_PRIVATE_KEY" > /tmp/prowl-ec2-key.pem
