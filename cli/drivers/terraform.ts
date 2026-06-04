@@ -47,6 +47,7 @@ const NON_PROVIDER_PLAN_ERROR_PATTERNS: RegExp[] = [
 ];
 
 type TerraformVariableKind = 'string' | 'number' | 'bool' | 'list' | 'map' | 'set' | 'object' | 'tuple';
+type TerraformObjectAttributeTypes = Record<string, Record<string, TerraformVariableKind>>;
 
 // Stub credentials for each major provider. None of these are real — they're
 // shaped to satisfy the provider's "credentials are configured" check so plan
@@ -172,16 +173,192 @@ function normalizeTerraformVariableKind(typeExpression: string): TerraformVariab
 
 export function extractTerraformVariableTypes(hcl: string): Record<string, TerraformVariableKind> {
   const types: Record<string, TerraformVariableKind> = {};
-  const variableBlockPattern = /variable\s+"([^"]+)"\s*\{([\s\S]*?)^\s*\}/gm;
 
-  for (const match of hcl.matchAll(variableBlockPattern)) {
-    const typeMatch = match[2].match(/(?:^|\n)\s*type\s*=\s*([^\n#]+)/);
+  for (const block of extractTerraformVariableBlocks(hcl)) {
+    const typeMatch = block.body.match(/(?:^|\n)\s*type\s*=\s*([^\n#]+)/);
     if (typeMatch) {
-      types[match[1]] = normalizeTerraformVariableKind(typeMatch[1]);
+      types[block.name] = normalizeTerraformVariableKind(typeMatch[1]);
     }
   }
 
   return types;
+}
+
+function extractTerraformVariableBlocks(hcl: string): Array<{ name: string; body: string }> {
+  const blocks: Array<{ name: string; body: string }> = [];
+  const variablePattern = /variable\s+"([^"]+)"\s*\{/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = variablePattern.exec(hcl)) !== null) {
+    let depth = 1;
+    let inString = false;
+    let escaped = false;
+    const bodyStart = variablePattern.lastIndex;
+
+    for (let i = bodyStart; i < hcl.length; i++) {
+      const char = hcl[i];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (char === '\\') {
+          escaped = true;
+        } else if (char === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (char === '"') {
+        inString = true;
+      } else if (char === '{') {
+        depth++;
+      } else if (char === '}') {
+        depth--;
+        if (depth === 0) {
+          blocks.push({ name: match[1], body: hcl.slice(bodyStart, i) });
+          variablePattern.lastIndex = i + 1;
+          break;
+        }
+      }
+    }
+  }
+
+  return blocks;
+}
+
+function extractBalancedBody(source: string, openerIndex: number, opener: string, closer: string): string | null {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = openerIndex; i < source.length; i++) {
+    const char = source[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+    } else if (char === opener) {
+      depth++;
+    } else if (char === closer) {
+      depth--;
+      if (depth === 0) {
+        return source.slice(openerIndex + 1, i);
+      }
+    }
+  }
+
+  return null;
+}
+
+function parseObjectAttributeTypes(body: string): Record<string, TerraformVariableKind> {
+  const attributes: Record<string, TerraformVariableKind> = {};
+  let index = 0;
+
+  while (index < body.length) {
+    while (/[\s,]/.test(body[index] ?? '')) index++;
+
+    const nameMatch = /^[A-Za-z_][\w-]*/.exec(body.slice(index));
+    if (!nameMatch) {
+      index++;
+      continue;
+    }
+
+    const name = nameMatch[0];
+    index += name.length;
+
+    while (/\s/.test(body[index] ?? '')) index++;
+    if (body[index] !== '=') continue;
+    index++;
+
+    const expressionStart = index;
+    let parenDepth = 0;
+    let braceDepth = 0;
+    let bracketDepth = 0;
+    let inString = false;
+    let escaped = false;
+
+    while (index < body.length) {
+      const char = body[index];
+
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (char === '\\') {
+          escaped = true;
+        } else if (char === '"') {
+          inString = false;
+        }
+        index++;
+        continue;
+      }
+
+      if (char === '"') {
+        inString = true;
+      } else if (char === '(') {
+        parenDepth++;
+      } else if (char === ')') {
+        parenDepth--;
+      } else if (char === '{') {
+        braceDepth++;
+      } else if (char === '}') {
+        braceDepth--;
+      } else if (char === '[') {
+        bracketDepth++;
+      } else if (char === ']') {
+        bracketDepth--;
+      } else if (
+        parenDepth === 0
+        && braceDepth === 0
+        && bracketDepth === 0
+        && (char === '\n' || char === ',' || char === '#')
+      ) {
+        break;
+      }
+
+      index++;
+    }
+
+    const expression = body.slice(expressionStart, index).trim();
+    if (expression && !expression.toLowerCase().startsWith('optional(')) {
+      attributes[name] = normalizeTerraformVariableKind(expression);
+    }
+
+    while (index < body.length && body[index] !== '\n' && body[index] !== ',') index++;
+  }
+
+  return attributes;
+}
+
+export function extractTerraformObjectVariableAttributes(hcl: string): TerraformObjectAttributeTypes {
+  const objectAttributes: TerraformObjectAttributeTypes = {};
+
+  for (const block of extractTerraformVariableBlocks(hcl)) {
+    const objectMatch = /(?:^|\n)\s*type\s*=\s*object\s*\(/i.exec(block.body);
+    if (!objectMatch) continue;
+
+    const parenStart = objectMatch.index + objectMatch[0].length - 1;
+    const objectArgs = extractBalancedBody(block.body, parenStart, '(', ')');
+    if (!objectArgs) continue;
+
+    const braceStart = objectArgs.indexOf('{');
+    if (braceStart === -1) continue;
+
+    const attributesBody = extractBalancedBody(objectArgs, braceStart, '{', '}');
+    if (!attributesBody) continue;
+
+    objectAttributes[block.name] = parseObjectAttributeTypes(attributesBody);
+  }
+
+  return objectAttributes;
 }
 
 function encodeTfvarsString(value: string): string {
@@ -272,6 +449,7 @@ function encodeTypedTfvarsValue(
   name: string,
   value: string,
   kind: TerraformVariableKind = 'string',
+  objectAttributes: Record<string, TerraformVariableKind> = {},
 ): string {
   switch (kind) {
     case 'number':
@@ -285,17 +463,27 @@ function encodeTypedTfvarsValue(
     case 'map':
       return `{ stub = ${encodeTfvarsString(value || `prowl-test-${name}`)} }`;
     case 'object':
-      return '{}';
+      return encodeTfvarsObjectValue(objectAttributes);
     case 'string':
     default:
       return encodeTfvarsString(value);
   }
 }
 
+function encodeTfvarsObjectValue(attributes: Record<string, TerraformVariableKind>): string {
+  const entries = Object.entries(attributes);
+  if (entries.length === 0) return '{}';
+
+  return `{\n${entries.map(([name, kind]) => (
+    `  ${name} = ${encodeTypedTfvarsValue(name, defaultStubValueForVariable(name), kind)}`
+  )).join('\n')}\n}`;
+}
+
 export function buildStubTfvarsContent(
   declaredVars: string[],
   overrides: Record<string, string> = {},
   variableTypes: Record<string, TerraformVariableKind> = {},
+  objectVariableAttributes: TerraformObjectAttributeTypes = {},
 ): string {
   const seen = new Set<string>();
   const lines: string[] = [];
@@ -303,12 +491,22 @@ export function buildStubTfvarsContent(
     if (seen.has(name)) continue;
     seen.add(name);
     const value = overrides[name] ?? defaultStubValueForVariable(name);
-    lines.push(`${name} = ${encodeTypedTfvarsValue(name, value, variableTypes[name])}`);
+    lines.push(`${name} = ${encodeTypedTfvarsValue(
+      name,
+      value,
+      variableTypes[name],
+      objectVariableAttributes[name],
+    )}`);
   }
   for (const [name, value] of Object.entries(overrides)) {
     if (seen.has(name)) continue;
     seen.add(name);
-    lines.push(`${name} = ${encodeTypedTfvarsValue(name, value, variableTypes[name])}`);
+    lines.push(`${name} = ${encodeTypedTfvarsValue(
+      name,
+      value,
+      variableTypes[name],
+      objectVariableAttributes[name],
+    )}`);
   }
   return lines.join('\n') + '\n';
 }
@@ -318,6 +516,7 @@ export function renderTerraformTemplatePlaceholders(
   declaredVars: string[],
   overrides: Record<string, string> = {},
   variableTypes: Record<string, TerraformVariableKind> = {},
+  objectVariableAttributes: TerraformObjectAttributeTypes = {},
 ): string {
   let rendered = hcl;
 
@@ -325,7 +524,12 @@ export function renderTerraformTemplatePlaceholders(
     const placeholderName = name.toUpperCase();
     const pattern = new RegExp(`\\{\\{\\s*${escapeRegExp(placeholderName)}\\s*\\}\\}`, 'gi');
     const value = overrides[name] ?? defaultStubValueForVariable(name);
-    const typedValue = encodeTypedTfvarsValue(name, value, variableTypes[name]);
+    const typedValue = encodeTypedTfvarsValue(
+      name,
+      value,
+      variableTypes[name],
+      objectVariableAttributes[name],
+    );
     const stringFragment = encodeHclStringFragment(value);
 
     rendered = rendered.replace(pattern, (_match: string, offset: number, source: string) => (
@@ -404,17 +608,29 @@ export async function runTerraformTest(
     const hcl = stripYamlSeparator(dedentBlock(block));
     const declaredVars = extractDeclaredVarNames(content);
     const variableTypes = extractTerraformVariableTypes(hcl);
+    const objectVariableAttributes = extractTerraformObjectVariableAttributes(hcl);
 
     // Write the HCL as main.tf after rendering catalog template placeholders.
     await fs.writeFile(
       path.join(tmpDir, 'main.tf'),
-      renderTerraformTemplatePlaceholders(hcl, declaredVars, options.varOverrides, variableTypes),
+      renderTerraformTemplatePlaceholders(
+        hcl,
+        declaredVars,
+        options.varOverrides,
+        variableTypes,
+        objectVariableAttributes,
+      ),
     );
 
     // Write stub tfvars so `plan` doesn't fail purely on missing variable values.
     await fs.writeFile(
       path.join(tmpDir, 'terraform.tfvars'),
-      buildStubTfvarsContent(declaredVars, options.varOverrides, variableTypes),
+      buildStubTfvarsContent(
+        declaredVars,
+        options.varOverrides,
+        variableTypes,
+        objectVariableAttributes,
+      ),
     );
 
     const execEnv = { ...process.env, ...STUB_PROVIDER_ENV };

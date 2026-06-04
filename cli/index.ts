@@ -78,6 +78,19 @@ function detectTool(content: string): string {
   return match ? match[1].trim().toLowerCase() : 'unknown';
 }
 
+async function filterPlaybooksByTool(playbookPaths: string[], expectedTool: string): Promise<string[]> {
+  const filtered: string[] = [];
+
+  for (const playbookPath of playbookPaths) {
+    const content = await fs.readFile(playbookPath, 'utf8');
+    if (detectTool(content) === expectedTool) {
+      filtered.push(playbookPath);
+    }
+  }
+
+  return filtered;
+}
+
 function detectOsFamily(content: string): string {
   const match = content.match(/^os_family:\s*(.+)$/m);
   return match ? match[1].trim().toLowerCase() : 'agnostic';
@@ -407,7 +420,14 @@ async function main(): Promise<void> {
     }
   }
 
-  const playbooks = testAll ? await findAllPlaybooks() : playbookPaths;
+  let playbooks = testAll ? await findAllPlaybooks() : playbookPaths;
+  let excludedFromEc2All = 0;
+
+  if (testAll && driver === 'ec2') {
+    const ansiblePlaybooks = await filterPlaybooksByTool(playbooks, 'ansible');
+    excludedFromEc2All = playbooks.length - ansiblePlaybooks.length;
+    playbooks = ansiblePlaybooks;
+  }
 
   if (playbooks.length === 0) {
     console.error('Error: No playbook files specified. Use --all or provide paths.');
@@ -423,6 +443,9 @@ async function main(): Promise<void> {
   console.log(`  Driver: ${driver}`);
   if (driver === 'ec2') {
     console.log(`  Environments: ${envProfiles.join(', ')}`);
+    if (testAll && excludedFromEc2All > 0) {
+      console.log(`  Scope: ansible-only --all sweep (${excludedFromEc2All} non-Ansible playbook(s) excluded)`);
+    }
   }
 
   let passed = 0;
