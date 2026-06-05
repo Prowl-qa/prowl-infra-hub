@@ -12,6 +12,9 @@
 
 ## Low Priority / Post-Release
 
+{PQIH-028} **INFRA-068: Evaluate npm trusted publishing for CLI releases**
+   CodeRabbit recommended replacing the long-lived `NPM_TOKEN` secret with npm trusted publishing via GitHub OIDC. This should be handled as a release-ops task because it requires npm package-side trusted publisher configuration before the workflow can safely remove `NODE_AUTH_TOKEN`.
+
 {PQIH-009} **INFRA-009: Prowl Infra Test CLI — Docker Compose driver**
    Add Docker Compose support: `docker compose config` validation + `docker compose up --wait` with health checks.
 
