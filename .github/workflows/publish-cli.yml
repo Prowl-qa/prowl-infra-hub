@@ -1,0 +1,36 @@
+name: Publish CLI (prowl-infra)
+
+# Manually publishes the `prowl-infra` CLI (cli/) to npm.
+# Click "Run workflow" from the Actions tab (this workflow must be on the
+# default branch for that button to appear).
+#
+# Requires the `NPM_TOKEN` repo secret: a granular npm token with
+# "All packages" read+write and "Bypass 2FA" enabled (needed to create/publish
+# this package). Bump cli/package.json "version" before re-running — npm will
+# reject republishing an existing version.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build CLI bundle
+        run: npm run build:cli # -> cli/dist/cli.js
+
+      - name: Publish prowl-infra to npm
+        run: npm publish --access public --ignore-scripts
+        working-directory: cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
