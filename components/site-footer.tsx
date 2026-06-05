@@ -120,7 +120,7 @@ export default function SiteFooter() {
       </div>
 
       <div className="container footer-legal">
-        <p>&copy; {new Date().getFullYear()} Prowl</p>
+        <p>&copy; {new Date().getFullYear()} Genkei Labs</p>
       </div>
     </footer>
   );
