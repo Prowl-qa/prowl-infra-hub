@@ -46,20 +46,7 @@ different distribution, different competitive set (Ansible Galaxy / Terraform Re
 users, ~16 npm downloads/month (mirrors), and a backlog that would consume months plus real
 cloud spend. Nothing is deleted — the repo is archived read-only. **All existing open items
 (INFRA-009, -010, -011, -012, -014, -054, -061, -068) are superseded by this section.**
-INFRA-070, -071, and -073 are done (see [resolved.md](resolved.md)); item numbers stay stable.
-
-{PQIH-031} **INFRA-072: Decommission the site, database, and DNS**
-   Remove the hosting project for the infra subdomain, delete the `sync-to-database` workflow
-   and drop/close any Postgres instance it was ever pointed at (INFRA-054 says it is currently
-   disconnected — confirm no orphaned managed DB is still billing), remove the DNS record.
-   **Acceptance**: subdomain no longer resolves to the app; no recurring hosting/db cost.
-   _Status (2026-08-26): **mostly done.** Vercel: the Neon Postgres resource `prowl-infra-hub-db`
-   was disconnected and deleted (the Upstash Redis resource was already uninstalled), then the
-   `prowl-infra-hub` Vercel project and all its deployments were removed —
-   `https://infra.prowl.tools` now returns Vercel 404. `sync-to-database.yml` removed on
-   `sunset-infra-hub` (`DATABASE_URL` was never set as a secret, so nothing else was pointed at
-   a DB). **Remaining (owner):** delete the `infra` CNAME (`→ *.vercel-dns-017.com`) in the
-   Cloudflare zone for `prowl.tools` — no Cloudflare credential is available to the agent._
+INFRA-070..073 are done (see [resolved.md](resolved.md)); only INFRA-074 remains. Item numbers stay stable.
 
 {PQIH-033} **INFRA-074: Archive the repository**
    After INFRA-070..073: retirement banner at the top of `README.md` and `cli/README.md`
