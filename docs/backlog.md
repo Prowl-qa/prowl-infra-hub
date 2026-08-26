@@ -46,7 +46,7 @@ different distribution, different competitive set (Ansible Galaxy / Terraform Re
 users, ~16 npm downloads/month (mirrors), and a backlog that would consume months plus real
 cloud spend. Nothing is deleted — the repo is archived read-only. **All existing open items
 (INFRA-009, -010, -011, -012, -014, -054, -061, -068) are superseded by this section.**
-INFRA-070 and INFRA-071 are done (see [resolved.md](resolved.md)); item numbers stay stable.
+INFRA-070, -071, and -073 are done (see [resolved.md](resolved.md)); item numbers stay stable.
 
 {PQIH-031} **INFRA-072: Decommission the site, database, and DNS**
    Remove the hosting project for the infra subdomain, delete the `sync-to-database` workflow
@@ -60,24 +60,6 @@ INFRA-070 and INFRA-071 are done (see [resolved.md](resolved.md)); item numbers 
    `sunset-infra-hub` (`DATABASE_URL` was never set as a secret, so nothing else was pointed at
    a DB). **Remaining (owner):** delete the `infra` CNAME (`→ *.vercel-dns-017.com`) in the
    Cloudflare zone for `prowl.tools` — no Cloudflare credential is available to the agent._
-
-{PQIH-032} **INFRA-073: Remove automation attached to this repo**
-   Deregister the `lucius-mac-mini-prowl-infra-hub` self-hosted runner (from `prowl-code-review`
-   #64's rollout), abandon the pushed `prowl-review-codex` branch, uninstall CodeRabbit, and
-   delete the `claude-code-review.yml`, `claude.yml`, `prowl-review*.yml`, `test-playbook*.yml`,
-   `lint-workflows.yml`, and `validate-submission.yml` workflows.
-   **Acceptance**: no runners registered to this repo; no GitHub Apps installed; Actions idle.
-   _Status (2026-08-26): **partially done.** All nine workflow files deleted on
-   `sunset-infra-hub` (the `prowl-review*.yml` files only ever existed on the unmerged
-   `prowl-review-codex` branch). **Finding:** CodeRabbit, Claude, and prowl-review are installed
-   at the **org** level with "all repositories" — there is no per-repo uninstall; archiving makes
-   them inert here, and narrowing the org installation is a separate owner decision.
-   Runner `lucius-mac-mini-prowl-infra-hub` (id 21) deregistered via the API — the repo now
-   lists zero runners; `CLAUDE_CODE_OAUTH_TOKEN` secret deleted; remote `prowl-review-codex`
-   branch deleted. **Remaining (owner, outside this repo):** `svc.sh uninstall` /
-   `config.sh remove` in that runner's directory on the Mac mini so the orphaned service stops;
-   decide whether to narrow the org-wide CodeRabbit/Claude/prowl-review installations (archiving
-   already makes them inert here)._
 
 {PQIH-033} **INFRA-074: Archive the repository**
    After INFRA-070..073: retirement banner at the top of `README.md` and `cli/README.md`
