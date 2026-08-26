@@ -46,37 +46,7 @@ different distribution, different competitive set (Ansible Galaxy / Terraform Re
 users, ~16 npm downloads/month (mirrors), and a backlog that would consume months plus real
 cloud spend. Nothing is deleted — the repo is archived read-only. **All existing open items
 (INFRA-009, -010, -011, -012, -014, -054, -061, -068) are superseded by this section.**
-
-{PQIH-029} **INFRA-070: Tear down the AWS EC2 test environment and revoke cloud access**
-   This is the only item with a running cost and a security surface, so it goes first. Use the
-   committed state in `infra/ec2-test-env/` (`terraform destroy`) to remove the subnet, security
-   group, key pair, and any spot instances; then delete the GitHub OIDC trust / IAM role the
-   `test-playbook-ec2.yml` and `test-aws-connection.yml` workflows assume; delete the
-   `EC2_*` repo secrets/variables. Note that `terraform.tfstate` and `terraform.tfvars` are
-   committed in this repo — verify they contain no credentials before archiving (history is
-   public).
-   **Acceptance**: AWS console shows no resources tagged to this project; IAM role/OIDC provider
-   removed; next AWS bill for this account is $0 for these resources.
-
-{PQIH-030} **INFRA-071: Deprecate the `prowl-infra` npm package**
-   `npm deprecate prowl-infra "Retired 2026-08; no longer maintained."` for all versions, delete
-   `publish-cli.yml` and the `NPM_TOKEN` secret. This closes INFRA-068 (trusted publishing) as
-   won't-do.
-   **Acceptance**: `npm view prowl-infra` shows the deprecation notice; no publish workflow
-   remains.
-
-{PQIH-031} **INFRA-072: Decommission the site, database, and DNS**
-   Remove the hosting project for the infra subdomain, delete the `sync-to-database` workflow
-   and drop/close any Postgres instance it was ever pointed at (INFRA-054 says it is currently
-   disconnected — confirm no orphaned managed DB is still billing), remove the DNS record.
-   **Acceptance**: subdomain no longer resolves to the app; no recurring hosting/db cost.
-
-{PQIH-032} **INFRA-073: Remove automation attached to this repo**
-   Deregister the `lucius-mac-mini-prowl-infra-hub` self-hosted runner (from `prowl-code-review`
-   #64's rollout), abandon the pushed `prowl-review-codex` branch, uninstall CodeRabbit, and
-   delete the `claude-code-review.yml`, `claude.yml`, `prowl-review*.yml`, `test-playbook*.yml`,
-   `lint-workflows.yml`, and `validate-submission.yml` workflows.
-   **Acceptance**: no runners registered to this repo; no GitHub Apps installed; Actions idle.
+INFRA-070..073 are done (see [resolved.md](resolved.md)); only INFRA-074 remains. Item numbers stay stable.
 
 {PQIH-033} **INFRA-074: Archive the repository**
    After INFRA-070..073: retirement banner at the top of `README.md` and `cli/README.md`
@@ -85,6 +55,12 @@ cloud spend. Nothing is deleted — the repo is archived read-only. **All existi
    `prowl-web` PQW-025 (remove the "Prowl Infra Hub" product), the workspace `CLAUDE.md` repo
    map and display-name decision (workspace-level; do in the same pass as PQW-025).
    **Acceptance**: repo shows "archived"; no inbound links from live Prowl properties.
+   _Status (2026-08-26): **in progress.** Retirement banners added to `README.md` and
+   `cli/README.md`, `CLAUDE.md` / `AGENTS.md` marked FROZEN, `docs/ec2-testing.md` marked
+   retired — all on branch `sunset-infra-hub`. **Remaining:** merge that branch to `main`, then
+   `gh repo archive prowl-tools/prowl-infra-hub` as `prowltools`, then move the local clone to
+   `Repositories/Archived/prowl-infra-hub/`. Cross-repo: `prowl-web` PQW-025 + workspace
+   `CLAUDE.md` repo-map row._
 
 ---
 

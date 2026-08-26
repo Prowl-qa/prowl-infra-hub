@@ -1,5 +1,23 @@
 # Prowl Infra Hub
 
+> **⚠️ Retired — this repository is archived (2026-08-26).**
+>
+> Prowl Infra Hub was an Ansible/Terraform template registry plus a `prowl-infra` test CLI
+> aimed at platform/ops teams. It never found users, and it was a second business bolted
+> onto a developer-tools brand, so [Prowl Tools](https://prowl.tools) cut scope to a single
+> product — the **Prowl CLI** — and retired this project. Nothing was deleted: the playbook
+> catalog, web app, and CLI source remain here as a read-only reference, but the hosted site
+> (`infra.prowl.tools`), its database, the AWS EC2 test environment, and all CI automation
+> have been torn down, and the `prowl-infra` npm package is deprecated. No issues, pull
+> requests, or submissions are accepted.
+>
+> For the product that carried forward, see **[prowl.tools](https://prowl.tools)** and
+> [`prowl-tools/prowl`](https://github.com/prowl-tools/prowl).
+
+---
+
+_The original README follows, unchanged, for reference._
+
 A curated, community-contributed registry of verified infrastructure automation templates. Browse, search, and download playbooks for common infrastructure patterns — from server provisioning to security hardening to monitoring setup.
 
 Part of the [Prowl](https://prowl.tools) suite, alongside the [Prowl CLI](https://github.com/prowl-tools/prowl) and [Prowl Hub](https://hub.prowl.tools).
