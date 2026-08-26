@@ -1,5 +1,11 @@
 # prowl-infra
 
+> **⚠️ Retired — `prowl-infra` is deprecated on npm and this repository is archived
+> (2026-08-26).** The package still installs, but it is no longer maintained, the EC2
+> test environment it drove no longer exists, and no further releases will be published.
+> Prowl Tools now ships one product — the **Prowl CLI** (`npm install -g prowl-tools`) — see
+> [prowl.tools](https://prowl.tools). The original README follows, unchanged, for reference.
+
 `prowl-infra` is a command-line tool for testing Ansible playbooks published in
 the [Prowl Infra Hub](https://github.com/prowl-tools/prowl-infra-hub) catalog. It
 runs each playbook either inside a local Docker container (fast, syntax-level

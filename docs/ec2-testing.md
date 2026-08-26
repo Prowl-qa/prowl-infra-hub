@@ -1,5 +1,9 @@
 # EC2 testing guide
 
+> **Retired (2026-08-26).** The EC2 test environment, IAM role/OIDC trust, GitHub secrets, and
+> the `test-playbook-ec2.yml` workflow described below were all torn down when Prowl Infra Hub was
+> sunset. This page is kept only as a historical reference; none of the commands work anymore.
+
 The `prowl-infra` CLI's `--driver ec2` mode launches an ephemeral spot EC2 instance, runs the playbook under test against the real Linux host via Molecule, captures the result, and terminates the instance. This is the high-fidelity counterpart to the default Docker driver — slower and chargeable to AWS, but the only way to validate behavior against a real kernel, real systemd, and the real package manager.
 
 This guide covers the one-time AWS setup, the CI integration, the available environment profiles, expected costs, troubleshooting, and how to extend the matrix.
