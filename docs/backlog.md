@@ -84,9 +84,11 @@ INFRA-070 is done (see [resolved.md](resolved.md)); item numbers stay stable.
    at the **org** level with "all repositories" — there is no per-repo uninstall; archiving makes
    them inert here, and narrowing the org installation is a separate owner decision.
    Runner `lucius-mac-mini-prowl-infra-hub` (id 21) deregistered via the API — the repo now
-   lists zero runners; `CLAUDE_CODE_OAUTH_TOKEN` secret deleted. **Remaining (owner):**
-   `svc.sh uninstall` / `config.sh remove` in that runner's directory on the Mac mini so the
-   orphaned service stops; `git push origin --delete prowl-review-codex`._
+   lists zero runners; `CLAUDE_CODE_OAUTH_TOKEN` secret deleted; remote `prowl-review-codex`
+   branch deleted. **Remaining (owner, outside this repo):** `svc.sh uninstall` /
+   `config.sh remove` in that runner's directory on the Mac mini so the orphaned service stops;
+   decide whether to narrow the org-wide CodeRabbit/Claude/prowl-review installations (archiving
+   already makes them inert here)._
 
 {PQIH-033} **INFRA-074: Archive the repository**
    After INFRA-070..073: retirement banner at the top of `README.md` and `cli/README.md`
