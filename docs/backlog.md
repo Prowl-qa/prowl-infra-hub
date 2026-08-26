@@ -57,15 +57,17 @@ cloud spend. Nothing is deleted — the repo is archived read-only. **All existi
    public).
    **Acceptance**: AWS console shows no resources tagged to this project; IAM role/OIDC provider
    removed; next AWS bill for this account is $0 for these resources.
-   _Status (2026-08-26): **partially done.** Verified via AWS CLI: no EC2 instances or spot
-   requests in any US/EU region, no RDS; the only live resources are the Terraform-managed
-   scaffolding (VPC, subnet, IGW, route table, SG, key pair, OIDC provider, IAM role + inline
-   policy) and the OIDC provider is trusted only by `prowl-molecule-gh-actions`, so a full
-   `terraform destroy` is safe. `terraform.tfvars` holds only an ED25519 *public* key and
-   `terraform.tfstate` contains no secrets (13 resources, all `sensitive_attributes: []`).
-   `test-aws-connection.yml` / `test-playbook-ec2.yml` removed on branch `sunset-infra-hub`.
-   **Remaining (owner, blocked for the agent):** run `terraform destroy` in
-   `infra/ec2-test-env/`; delete the `AWS_ROLE_ARN` + `EC2_*` repo secrets._
+   _Status (2026-08-26): **AWS teardown done.** `terraform destroy` in `infra/ec2-test-env/`
+   removed all 10 managed resources (VPC, subnet, IGW, route table + association, security
+   group, key pair, GitHub OIDC provider, IAM role + inline policy); verified afterwards via
+   AWS CLI — no `Project`-tagged resources, no OIDC providers, no `prowl*`/`molecule*` roles, no
+   key pairs, no instances/spot requests/RDS in any US/EU region. Correction to the item text:
+   neither `terraform.tfstate` nor `terraform.tfvars` was ever committed (`*.tfstate` and
+   `*.tfvars` are gitignored — only `main.tf`, `outputs.tf`, `variables.tf`, and the lock file
+   are tracked), and the local tfvars holds only an ED25519 *public* key, so nothing sensitive
+   is in history. `test-aws-connection.yml` / `test-playbook-ec2.yml` removed on branch
+   `sunset-infra-hub`. **Remaining (owner):** delete the `AWS_ROLE_ARN` + `EC2_*` repo secrets
+   (they now point at nothing, but are still stored)._
 
 {PQIH-030} **INFRA-071: Deprecate the `prowl-infra` npm package**
    `npm deprecate prowl-infra "Retired 2026-08; no longer maintained."` for all versions, delete
