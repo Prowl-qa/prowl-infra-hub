@@ -46,18 +46,7 @@ different distribution, different competitive set (Ansible Galaxy / Terraform Re
 users, ~16 npm downloads/month (mirrors), and a backlog that would consume months plus real
 cloud spend. Nothing is deleted — the repo is archived read-only. **All existing open items
 (INFRA-009, -010, -011, -012, -014, -054, -061, -068) are superseded by this section.**
-INFRA-070 is done (see [resolved.md](resolved.md)); item numbers stay stable.
-
-{PQIH-030} **INFRA-071: Deprecate the `prowl-infra` npm package**
-   `npm deprecate prowl-infra "Retired 2026-08; no longer maintained."` for all versions, delete
-   `publish-cli.yml` and the `NPM_TOKEN` secret. This closes INFRA-068 (trusted publishing) as
-   won't-do.
-   **Acceptance**: `npm view prowl-infra` shows the deprecation notice; no publish workflow
-   remains.
-   _Status (2026-08-26): **partially done.** `publish-cli.yml` removed on `sunset-infra-hub`;
-   `cli/README.md` carries the deprecation banner. Only `prowl-infra@0.0.1` exists on npm.
-   `NPM_TOKEN` repo secret deleted. **Remaining (owner):** `npm login` then
-   `npm deprecate prowl-infra "..."`._
+INFRA-070 and INFRA-071 are done (see [resolved.md](resolved.md)); item numbers stay stable.
 
 {PQIH-031} **INFRA-072: Decommission the site, database, and DNS**
    Remove the hosting project for the infra subdomain, delete the `sync-to-database` workflow
