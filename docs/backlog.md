@@ -46,28 +46,7 @@ different distribution, different competitive set (Ansible Galaxy / Terraform Re
 users, ~16 npm downloads/month (mirrors), and a backlog that would consume months plus real
 cloud spend. Nothing is deleted — the repo is archived read-only. **All existing open items
 (INFRA-009, -010, -011, -012, -014, -054, -061, -068) are superseded by this section.**
-
-{PQIH-029} **INFRA-070: Tear down the AWS EC2 test environment and revoke cloud access**
-   This is the only item with a running cost and a security surface, so it goes first. Use the
-   committed state in `infra/ec2-test-env/` (`terraform destroy`) to remove the subnet, security
-   group, key pair, and any spot instances; then delete the GitHub OIDC trust / IAM role the
-   `test-playbook-ec2.yml` and `test-aws-connection.yml` workflows assume; delete the
-   `EC2_*` repo secrets/variables. Note that `terraform.tfstate` and `terraform.tfvars` are
-   committed in this repo — verify they contain no credentials before archiving (history is
-   public).
-   **Acceptance**: AWS console shows no resources tagged to this project; IAM role/OIDC provider
-   removed; next AWS bill for this account is $0 for these resources.
-   _Status (2026-08-26): **AWS teardown done.** `terraform destroy` in `infra/ec2-test-env/`
-   removed all 10 managed resources (VPC, subnet, IGW, route table + association, security
-   group, key pair, GitHub OIDC provider, IAM role + inline policy); verified afterwards via
-   AWS CLI — no `Project`-tagged resources, no OIDC providers, no `prowl*`/`molecule*` roles, no
-   key pairs, no instances/spot requests/RDS in any US/EU region. Correction to the item text:
-   neither `terraform.tfstate` nor `terraform.tfvars` was ever committed (`*.tfstate` and
-   `*.tfvars` are gitignored — only `main.tf`, `outputs.tf`, `variables.tf`, and the lock file
-   are tracked), and the local tfvars holds only an ED25519 *public* key, so nothing sensitive
-   is in history. `test-aws-connection.yml` / `test-playbook-ec2.yml` removed on branch
-   `sunset-infra-hub`. **Remaining (owner):** delete the `AWS_ROLE_ARN` + `EC2_*` repo secrets
-   (they now point at nothing, but are still stored)._
+INFRA-070 is done (see [resolved.md](resolved.md)); item numbers stay stable.
 
 {PQIH-030} **INFRA-071: Deprecate the `prowl-infra` npm package**
    `npm deprecate prowl-infra "Retired 2026-08; no longer maintained."` for all versions, delete
@@ -77,8 +56,8 @@ cloud spend. Nothing is deleted — the repo is archived read-only. **All existi
    remains.
    _Status (2026-08-26): **partially done.** `publish-cli.yml` removed on `sunset-infra-hub`;
    `cli/README.md` carries the deprecation banner. Only `prowl-infra@0.0.1` exists on npm.
-   **Remaining (owner):** `npm login` then `npm deprecate prowl-infra "..."`; delete the
-   `NPM_TOKEN` repo secret._
+   `NPM_TOKEN` repo secret deleted. **Remaining (owner):** `npm login` then
+   `npm deprecate prowl-infra "..."`._
 
 {PQIH-031} **INFRA-072: Decommission the site, database, and DNS**
    Remove the hosting project for the infra subdomain, delete the `sync-to-database` workflow
@@ -106,8 +85,8 @@ cloud spend. Nothing is deleted — the repo is archived read-only. **All existi
    them inert here, and narrowing the org installation is a separate owner decision.
    **Remaining (owner, blocked for the agent):** `DELETE /repos/prowl-tools/prowl-infra-hub/actions/runners/21`
    (runner `lucius-mac-mini-prowl-infra-hub`) plus `svc.sh uninstall` / `config.sh remove` on
-   the Mac mini; `git push origin --delete prowl-review-codex`; delete the
-   `CLAUDE_CODE_OAUTH_TOKEN` secret._
+   the Mac mini; `git push origin --delete prowl-review-codex`. (`CLAUDE_CODE_OAUTH_TOKEN`
+   secret already deleted.)_
 
 {PQIH-033} **INFRA-074: Archive the repository**
    After INFRA-070..073: retirement banner at the top of `README.md` and `cli/README.md`
