@@ -57,6 +57,15 @@ cloud spend. Nothing is deleted — the repo is archived read-only. **All existi
    public).
    **Acceptance**: AWS console shows no resources tagged to this project; IAM role/OIDC provider
    removed; next AWS bill for this account is $0 for these resources.
+   _Status (2026-08-26): **partially done.** Verified via AWS CLI: no EC2 instances or spot
+   requests in any US/EU region, no RDS; the only live resources are the Terraform-managed
+   scaffolding (VPC, subnet, IGW, route table, SG, key pair, OIDC provider, IAM role + inline
+   policy) and the OIDC provider is trusted only by `prowl-molecule-gh-actions`, so a full
+   `terraform destroy` is safe. `terraform.tfvars` holds only an ED25519 *public* key and
+   `terraform.tfstate` contains no secrets (13 resources, all `sensitive_attributes: []`).
+   `test-aws-connection.yml` / `test-playbook-ec2.yml` removed on branch `sunset-infra-hub`.
+   **Remaining (owner, blocked for the agent):** run `terraform destroy` in
+   `infra/ec2-test-env/`; delete the `AWS_ROLE_ARN` + `EC2_*` repo secrets._
 
 {PQIH-030} **INFRA-071: Deprecate the `prowl-infra` npm package**
    `npm deprecate prowl-infra "Retired 2026-08; no longer maintained."` for all versions, delete
@@ -64,12 +73,23 @@ cloud spend. Nothing is deleted — the repo is archived read-only. **All existi
    won't-do.
    **Acceptance**: `npm view prowl-infra` shows the deprecation notice; no publish workflow
    remains.
+   _Status (2026-08-26): **partially done.** `publish-cli.yml` removed on `sunset-infra-hub`;
+   `cli/README.md` carries the deprecation banner. Only `prowl-infra@0.0.1` exists on npm.
+   **Remaining (owner):** `npm login` then `npm deprecate prowl-infra "..."`; delete the
+   `NPM_TOKEN` repo secret._
 
 {PQIH-031} **INFRA-072: Decommission the site, database, and DNS**
    Remove the hosting project for the infra subdomain, delete the `sync-to-database` workflow
    and drop/close any Postgres instance it was ever pointed at (INFRA-054 says it is currently
    disconnected — confirm no orphaned managed DB is still billing), remove the DNS record.
    **Acceptance**: subdomain no longer resolves to the app; no recurring hosting/db cost.
+   _Status (2026-08-26): **mostly done.** Vercel: the Neon Postgres resource `prowl-infra-hub-db`
+   was disconnected and deleted (the Upstash Redis resource was already uninstalled), then the
+   `prowl-infra-hub` Vercel project and all its deployments were removed —
+   `https://infra.prowl.tools` now returns Vercel 404. `sync-to-database.yml` removed on
+   `sunset-infra-hub` (`DATABASE_URL` was never set as a secret, so nothing else was pointed at
+   a DB). **Remaining (owner):** delete the `infra` CNAME (`→ *.vercel-dns-017.com`) in the
+   Cloudflare zone for `prowl.tools` — no Cloudflare credential is available to the agent._
 
 {PQIH-032} **INFRA-073: Remove automation attached to this repo**
    Deregister the `lucius-mac-mini-prowl-infra-hub` self-hosted runner (from `prowl-code-review`
@@ -77,6 +97,15 @@ cloud spend. Nothing is deleted — the repo is archived read-only. **All existi
    delete the `claude-code-review.yml`, `claude.yml`, `prowl-review*.yml`, `test-playbook*.yml`,
    `lint-workflows.yml`, and `validate-submission.yml` workflows.
    **Acceptance**: no runners registered to this repo; no GitHub Apps installed; Actions idle.
+   _Status (2026-08-26): **partially done.** All nine workflow files deleted on
+   `sunset-infra-hub` (the `prowl-review*.yml` files only ever existed on the unmerged
+   `prowl-review-codex` branch). **Finding:** CodeRabbit, Claude, and prowl-review are installed
+   at the **org** level with "all repositories" — there is no per-repo uninstall; archiving makes
+   them inert here, and narrowing the org installation is a separate owner decision.
+   **Remaining (owner, blocked for the agent):** `DELETE /repos/prowl-tools/prowl-infra-hub/actions/runners/21`
+   (runner `lucius-mac-mini-prowl-infra-hub`) plus `svc.sh uninstall` / `config.sh remove` on
+   the Mac mini; `git push origin --delete prowl-review-codex`; delete the
+   `CLAUDE_CODE_OAUTH_TOKEN` secret._
 
 {PQIH-033} **INFRA-074: Archive the repository**
    After INFRA-070..073: retirement banner at the top of `README.md` and `cli/README.md`
@@ -85,6 +114,12 @@ cloud spend. Nothing is deleted — the repo is archived read-only. **All existi
    `prowl-web` PQW-025 (remove the "Prowl Infra Hub" product), the workspace `CLAUDE.md` repo
    map and display-name decision (workspace-level; do in the same pass as PQW-025).
    **Acceptance**: repo shows "archived"; no inbound links from live Prowl properties.
+   _Status (2026-08-26): **in progress.** Retirement banners added to `README.md` and
+   `cli/README.md`, `CLAUDE.md` / `AGENTS.md` marked FROZEN, `docs/ec2-testing.md` marked
+   retired — all on branch `sunset-infra-hub`. **Remaining:** merge that branch to `main`, then
+   `gh repo archive prowl-tools/prowl-infra-hub` as `prowltools`, then move the local clone to
+   `Repositories/Archived/prowl-infra-hub/`. Cross-repo: `prowl-web` PQW-025 + workspace
+   `CLAUDE.md` repo-map row._
 
 ---
 
