@@ -1,7 +1,7 @@
 # Prowl Infra Hub - Product Backlog
 
 **Repo**: `prowl-tools/prowl-infra-hub`
-**Local path**: `~/Desktop/Current Projects/Prowl QA/Repositories/prowl-infra-hub`
+**Local path**: `~/Desktop/Current Projects/Prowl Tools/Repositories/prowl-infra-hub`
 **Main branch**: `main`
 **Stack**: Next.js + YAML playbook templates + PostgreSQL + Drizzle ORM + GitHub Actions CI
 **License**: Apache 2.0
@@ -37,6 +37,54 @@
 {PQIH-025} **INFRA-061: Evaluate upgrading Terraform driver from Plan-Mode to Apply-Mode**
     The plan-mode driver shipped in PQIH-008 catches syntax, schema, and provider-plugin issues but doesn't actually apply Terraform against real infrastructure. An apply-mode upgrade would mirror what INFRA-022 did for Ansible (EC2 spot driver) — provision short-lived cloud resources via OIDC, run `terraform apply` + `terraform destroy`, and verify the plan actually executes. Trade-offs to decide: (a) cost — real applies cost real money (NAT gateways, VPCs etc. priced per-hour) so we'd need spot/free-tier-only test profiles or a strict instance-type allowlist mirroring the EC2 IAM policy; (b) multi-cloud auth — the catalog has AWS, Azure, and GCP terraform playbooks, each needing its own OIDC trust + credential setup; (c) credential blast radius — apply-mode is destructive and requires broad IAM permissions per cloud, which is a meaningful step up from plan-mode's stub credentials. Evaluate whether the additional confidence is worth the operational complexity, and capture either a concrete implementation plan or an explicit decision to stay on plan-mode.
 
+
+## Sunset Work Items
+
+Decision (2026-08-26): **retire Prowl Infra Hub.** It is a second business (Ansible/Terraform
+registry + test CLI for platform/ops teams) bolted onto a QA/dev-tools brand: different buyer,
+different distribution, different competitive set (Ansible Galaxy / Terraform Registry), zero
+users, ~16 npm downloads/month (mirrors), and a backlog that would consume months plus real
+cloud spend. Nothing is deleted — the repo is archived read-only. **All existing open items
+(INFRA-009, -010, -011, -012, -014, -054, -061, -068) are superseded by this section.**
+
+{PQIH-029} **INFRA-070: Tear down the AWS EC2 test environment and revoke cloud access**
+   This is the only item with a running cost and a security surface, so it goes first. Use the
+   committed state in `infra/ec2-test-env/` (`terraform destroy`) to remove the subnet, security
+   group, key pair, and any spot instances; then delete the GitHub OIDC trust / IAM role the
+   `test-playbook-ec2.yml` and `test-aws-connection.yml` workflows assume; delete the
+   `EC2_*` repo secrets/variables. Note that `terraform.tfstate` and `terraform.tfvars` are
+   committed in this repo — verify they contain no credentials before archiving (history is
+   public).
+   **Acceptance**: AWS console shows no resources tagged to this project; IAM role/OIDC provider
+   removed; next AWS bill for this account is $0 for these resources.
+
+{PQIH-030} **INFRA-071: Deprecate the `prowl-infra` npm package**
+   `npm deprecate prowl-infra "Retired 2026-08; no longer maintained."` for all versions, delete
+   `publish-cli.yml` and the `NPM_TOKEN` secret. This closes INFRA-068 (trusted publishing) as
+   won't-do.
+   **Acceptance**: `npm view prowl-infra` shows the deprecation notice; no publish workflow
+   remains.
+
+{PQIH-031} **INFRA-072: Decommission the site, database, and DNS**
+   Remove the hosting project for the infra subdomain, delete the `sync-to-database` workflow
+   and drop/close any Postgres instance it was ever pointed at (INFRA-054 says it is currently
+   disconnected — confirm no orphaned managed DB is still billing), remove the DNS record.
+   **Acceptance**: subdomain no longer resolves to the app; no recurring hosting/db cost.
+
+{PQIH-032} **INFRA-073: Remove automation attached to this repo**
+   Deregister the `lucius-mac-mini-prowl-infra-hub` self-hosted runner (from `prowl-code-review`
+   #64's rollout), abandon the pushed `prowl-review-codex` branch, uninstall CodeRabbit, and
+   delete the `claude-code-review.yml`, `claude.yml`, `prowl-review*.yml`, `test-playbook*.yml`,
+   `lint-workflows.yml`, and `validate-submission.yml` workflows.
+   **Acceptance**: no runners registered to this repo; no GitHub Apps installed; Actions idle.
+
+{PQIH-033} **INFRA-074: Archive the repository**
+   After INFRA-070..073: retirement banner at the top of `README.md` and `cli/README.md`
+   (with the reason and a pointer to prowl.tools), mark `CLAUDE.md`/`AGENTS.md` frozen, archive
+   on GitHub as the `prowltools` account. Cross-repo cleanup lives where it belongs:
+   `prowl-web` PQW-025 (remove the "Prowl Infra Hub" product), the workspace `CLAUDE.md` repo
+   map and display-name decision (workspace-level; do in the same pass as PQW-025).
+   **Acceptance**: repo shows "archived"; no inbound links from live Prowl properties.
 
 ---
 
